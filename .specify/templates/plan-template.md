@@ -31,7 +31,17 @@
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-[Gates determined based on constitution file]
+对照 `.specify/memory/constitution.md`（模型编程能力测试系统）逐项确认：
+
+| Gate | 要求（摘要） | 本特性状态（Pass / Exception） |
+|------|----------------|-------------------------------|
+| G1 客观评测 | 以自动测试通过/失败为权威；主观投票不得替代系统测试结果 | |
+| G2 沙箱执行 | 模型 JS/TS 仅经浏览器端 Wasm 沙箱（如 QuickJS）；禁止 `eval` / `new Function` | |
+| G3 可解释性 | 规格含思路 + 自测用例；记录自测与系统测试通过率；二者对比必须作为评估维度呈现 | |
+| G4 多模型对比 | 支持多模型同题并列（思路、代码、结果） | |
+| G5 技术栈 | 前端 React+TS+Vite+Tailwind；后端 Deno+Hono（如需）；GitHub Pages + Deno Deploy | |
+
+*若任一项为 Exception，在下方 **Complexity Tracking** 表中写明理由与批准路径。*
 
 ## Project Structure
 
