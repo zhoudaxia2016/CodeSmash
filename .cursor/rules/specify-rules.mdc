@@ -1,0 +1,40 @@
+---
+description: Project Development Guidelines
+globs: ["**/*"]
+alwaysApply: true
+---
+# CodeSmash Development Guidelines
+
+Auto-generated from feature plans. Last updated: 2026-04-02
+
+## Active Technologies
+- TypeScript 5.x（前端）；Deno 2.x + TypeScript（可选 API） + React 18、Vite、Zustand、TanStack Query、Tailwind CSS、`@sebastianwessel/quickjs` 3.0.1；可选 Hono（Deno） (001-codesmesh-arena)
+- 题目与官方用例可随前端静态资源版本化；可选后端 SQLite/KV/libSQL 存排行榜聚合；用户 Key **默认仅存会话内存**，若提供「记住配置」须明示风险并本地加密或 OS 密钥链（实现期定） (001-codesmesh-arena)
+
+- **001-codesmesh-arena (CodeSmesh)**: React 18, TypeScript, Vite, Tailwind CSS, Zustand, TanStack Query v5, `@sebastianwessel/quickjs` 3.0.1 (browser Wasm); optional Hono on Deno 2.x **only** for public leaderboard API
+- **LLM calls**: BYOK — user API keys in browser; no server-side model proxy unless a future spec revision adds it
+- **Persistence (leaderboard)**: local/SQLite file in dev; Deno Deploy uses Deno KV or hosted libSQL/Turso — see `specs/001-codesmesh-arena/research.md`
+
+## Project Structure
+
+```text
+web/
+server/
+```
+
+## Commands
+
+- Web: `cd web` then `pnpm dev` / `pnpm build` / `pnpm test` (once scaffolded)
+- Server: `cd server` then `deno task dev` / `deno test` (once scaffolded)
+
+## Code Style
+
+TypeScript in `web/` and Deno in `server/`; follow repo ESLint/Prettier when added. Never use `eval` or `new Function` for model-generated code — QuickJS Wasm only.
+
+## Recent Changes
+- 001-codesmesh-arena: Added TypeScript 5.x（前端）；Deno 2.x + TypeScript（可选 API） + React 18、Vite、Zustand、TanStack Query、Tailwind CSS、`@sebastianwessel/quickjs` 3.0.1；可选 Hono（Deno）
+
+- 001-codesmesh-arena: Plan adopted — `web/` (BYOK + QuickJS) + optional `server/` (leaderboard); GitHub Actions → GitHub Pages; spec `spec.md` still describes platform-proxy v1 — reconcile via `plan.md` Complexity Tracking
+
+<!-- MANUAL ADDITIONS START -->
+<!-- MANUAL ADDITIONS END -->

@@ -82,6 +82,16 @@
   Fill them out with the right functional requirements.
 -->
 
+### Constitution Alignment *(mandatory when feature touches models, execution, or evaluation)*
+
+若本特性涉及模型输出、代码运行、评测或对比展示，功能需求 **必须** 显式覆盖（参见 `.specify/memory/constitution.md`）：
+
+- **客观评测**：系统测试来源、可复现运行与通过判定方式。
+- **沙箱**：执行路径（如 QuickJS Wasm）；明确不使用 `eval` / 非隔离 `new Function`。
+- **可解释性**：解题思路、自测用例的字段与存储；自测通过率 vs 系统测试通过率必须并列呈现并作为评估维度（非仅单一分数）。
+- **多模型对比**：同题多模型并列 UI/数据契约（若适用）。
+- **技术栈**：前端/后端/部署是否与 React+TS+Vite+Tailwind、Deno、GitHub Pages、Deno Deploy 一致或已记录例外。
+
 ### Functional Requirements
 
 - **FR-001**: System MUST [specific capability, e.g., "allow users to create accounts"]

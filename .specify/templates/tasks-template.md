@@ -68,6 +68,8 @@ Examples of foundational tasks (adjust based on your project):
 - [ ] T007 Create base models/entities that all stories depend on
 - [ ] T008 Configure error handling and logging infrastructure
 - [ ] T009 Setup environment configuration management
+- [ ] T010 [P] **Constitution**: 浏览器端 Wasm 沙箱执行管线（如 QuickJS）；禁止 `eval` 执行模型代码
+- [ ] T011 [P] **Constitution**: 客观评测流水线（系统测试运行与结果持久化）；思路/自测字段模型；自测 vs 系统测试对比维度
 
 **Checkpoint**: Foundation ready - user story implementation can now begin in parallel
 
