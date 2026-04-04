@@ -78,11 +78,118 @@
 }
 
 @layer base {
+  html {
+    height: 100%;
+  }
   * {
     @apply border-border;
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--muted-foreground) / 0.32) hsl(var(--muted) / 0.55);
   }
   body {
     @apply bg-background text-foreground antialiased;
     font-feature-settings: "rlig" 1, "calt" 1;
+    height: 100%;
+    overflow: hidden;
   }
+  #root {
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  /** Unified scrollbars: Firefox scrollbar-*; WebKit pseudo-elements. */
+  *::-webkit-scrollbar {
+    width: 9px;
+    height: 9px;
+  }
+  *::-webkit-scrollbar-track {
+    background: hsl(var(--muted) / 0.45);
+    border-radius: 9999px;
+  }
+  *::-webkit-scrollbar-thumb {
+    border-radius: 9999px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+    background-color: hsl(var(--muted-foreground) / 0.32);
+  }
+  *::-webkit-scrollbar-thumb:hover {
+    background-color: hsl(var(--muted-foreground) / 0.48);
+  }
+  *::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+
+  .dark * {
+    scrollbar-color: hsl(var(--muted-foreground) / 0.38) hsl(var(--muted) / 0.35);
+  }
+  .dark *::-webkit-scrollbar-track {
+    background: hsl(var(--muted) / 0.35);
+  }
+  .dark *::-webkit-scrollbar-thumb {
+    background-color: hsl(var(--muted-foreground) / 0.38);
+  }
+  .dark *::-webkit-scrollbar-thumb:hover {
+    background-color: hsl(var(--muted-foreground) / 0.55);
+  }
+}
+
+/*
+ * Tree-sitter highlight (JavaScript). Unlayered so span colors beat Tailwind utilities on the parent <pre>.
+ */
+.code-highlight-root .hl-keyword {
+  color: hsl(258 82% 74%);
+}
+.code-highlight-root .hl-string,
+.code-highlight-root .hl-string-special {
+  color: hsl(142 55% 58%);
+}
+.code-highlight-root .hl-comment {
+  color: hsl(240 6% 52%);
+  font-style: italic;
+}
+.code-highlight-root .hl-number {
+  color: hsl(32 90% 68%);
+}
+.code-highlight-root .hl-function,
+.code-highlight-root .hl-function-method,
+.code-highlight-root .hl-function-builtin {
+  color: hsl(210 75% 72%);
+}
+.code-highlight-root .hl-variable-builtin,
+.code-highlight-root .hl-constant-builtin {
+  color: hsl(280 65% 72%);
+}
+.code-highlight-root .hl-constant,
+.code-highlight-root .hl-constructor {
+  color: hsl(45 88% 68%);
+}
+.code-highlight-root .hl-property {
+  color: hsl(195 70% 72%);
+}
+.code-highlight-root .hl-variable {
+  color: hsl(var(--arena-code-fg));
+}
+.code-highlight-root .hl-operator {
+  color: hsl(340 70% 72%);
+}
+.code-highlight-root .hl-punctuation-bracket,
+.code-highlight-root .hl-punctuation-delimiter,
+.code-highlight-root .hl-punctuation-special {
+  color: hsl(240 8% 72%);
+}
+.code-highlight-root .hl-embedded {
+  color: hsl(168 60% 62%);
+}
+
+/* Markdown solution panel: fenced code (highlight.js puts .hljs on <code>) */
+.solution-md pre {
+  @apply rounded-md border border-border overflow-x-auto p-0 my-3;
+  background: hsl(var(--arena-code-bg));
+}
+.solution-md pre code.hljs {
+  @apply block p-3 text-sm font-mono leading-relaxed bg-transparent text-inherit;
+}
+.solution-md :not(pre) > code {
+  @apply rounded px-1.5 py-0.5 text-[0.8125rem] font-mono bg-muted text-foreground border border-border/80;
 }

@@ -1,31 +1,61 @@
 import { Hono } from 'hono'
-import { callLLM } from '../lib/llm.ts'
+import {
+  streamProblemAnalysis,
+  streamProblemCode,
+  stripCodeFences,
+} from '../lib/llm.ts'
 import { problems } from './problems.ts'
 
 const battlesRouter = new Hono()
+
+export type BattlePhase =
+  | 'pending'
+  | 'analyzing'
+  | 'coding'
+  | 'awaiting_execution'
+  | 'failed'
+  | 'completed'
+
+type OfficialDetail = {
+  testCaseId: string
+  input: string
+  expectedOutput: string
+  actualOutput: string
+  passed: boolean
+  timeMs?: number
+}
+
+type BattleResult = {
+  modelId: string
+  status: 'running' | 'completed' | 'failed'
+  phase: BattlePhase
+  thought: string
+  code: string
+  selfTestCases: { input: string; expectedOutput: string }[]
+  selfTestConclusion: string
+  officialResult?: {
+    passed: number
+    total: number
+    timeMs: number
+    details?: OfficialDetail[]
+  }
+  /** 模型输出总耗时 = analysisTimeMs + codingTimeMs（成功时） */
+  timeMs: number
+  analysisTimeMs?: number
+  codingTimeMs?: number
+  error?: string
+}
 
 type Battle = {
   id: string
   problemId: string
   modelAId: string
   modelBId: string
-  status: 'pending' | 'running' | 'completed' | 'failed'
+  status: 'pending' | 'running' | 'awaiting_client' | 'completed' | 'failed'
   modelAResult: BattleResult | null
   modelBResult: BattleResult | null
   createdAt: string
   completedAt: string | null
-}
-
-type BattleResult = {
-  modelId: string
-  status: 'completed' | 'failed'
-  thought: string
-  code: string
-  selfTestCases: { input: string; expectedOutput: string }[]
-  selfTestConclusion: string
-  officialResult: { passed: number; total: number; timeMs: number }
-  timeMs: number
-  error?: string
 }
 
 const activeBattles = new Map<string, Battle>()
@@ -33,6 +63,145 @@ const activeBattles = new Map<string, Battle>()
 function getModelProvider(modelId: string): 'minimax' | 'deepseek' {
   if (modelId.startsWith('minimax')) return 'minimax'
   return 'deepseek'
+}
+
+function tryFinishBattle(battle: Battle) {
+  const a = battle.modelAResult
+  const b = battle.modelBResult
+  if (!a || !b) return
+
+  const aDone = a.status === 'failed' || (a.officialResult != null && a.phase === 'completed')
+  const bDone = b.status === 'failed' || (b.officialResult != null && b.phase === 'completed')
+
+  if (aDone && bDone) {
+    battle.status = 'completed'
+    battle.completedAt = new Date().toISOString()
+  }
+}
+
+function emptyResult(modelId: string): BattleResult {
+  return {
+    modelId,
+    status: 'running',
+    phase: 'pending',
+    thought: '',
+    code: '',
+    selfTestCases: [],
+    selfTestConclusion: '',
+    timeMs: 0,
+  }
+}
+
+async function runSide(
+  battleId: string,
+  battle: Battle,
+  side: 'A' | 'B',
+  problem: typeof problems[0],
+  modelId: string,
+  provider: ReturnType<typeof getModelProvider>,
+) {
+  const key = side === 'A' ? 'modelAResult' : 'modelBResult'
+  const llmLog = `[battle=${battleId} side=${side} model=${modelId}]`
+
+  const merge = (partial: Partial<BattleResult>) => {
+    const prev = battle[key] ?? emptyResult(modelId)
+    battle[key] = { ...prev, ...partial, modelId } as BattleResult
+    activeBattles.set(battleId, battle)
+  }
+
+  console.log(`[battle] ${llmLog} runSide start provider=${provider}`)
+
+  merge({
+    ...emptyResult(modelId),
+    phase: 'analyzing',
+    thought: '',
+    code: '',
+  })
+
+  const start = Date.now()
+  let analysisTimeMs = 0
+  let codingTimeMs = 0
+  try {
+    const tAnalysis0 = Date.now()
+    let thought = ''
+    for await (const d of streamProblemAnalysis(provider, modelId, problem, llmLog)) {
+      thought += d
+      merge({ thought, phase: 'analyzing' })
+    }
+    analysisTimeMs = Date.now() - tAnalysis0
+
+    console.log(`[battle] ${llmLog} analysis done chars=${thought.length} -> code stream`)
+
+    merge({ phase: 'coding', thought })
+    const tCode0 = Date.now()
+    let code = ''
+    for await (const d of streamProblemCode(provider, modelId, problem, thought, llmLog)) {
+      code += d
+      merge({ code, phase: 'coding' })
+    }
+    codingTimeMs = Date.now() - tCode0
+
+    code = stripCodeFences(code)
+    const modelOutputMs = analysisTimeMs + codingTimeMs
+    merge({
+      phase: 'awaiting_execution',
+      thought,
+      code,
+      analysisTimeMs,
+      codingTimeMs,
+      timeMs: modelOutputMs,
+    })
+    console.log(
+      `[battle] ${llmLog} done awaiting_execution codeChars=${code.length} analysisMs=${analysisTimeMs} codingMs=${codingTimeMs} modelOutputMs=${modelOutputMs}`,
+    )
+  } catch (err) {
+    console.error(`[battle] ${llmLog} FAILED`, err)
+    merge({
+      status: 'failed',
+      phase: 'failed',
+      error: err instanceof Error ? err.message : 'Unknown error',
+      analysisTimeMs: analysisTimeMs || undefined,
+      codingTimeMs: codingTimeMs || undefined,
+      timeMs: Date.now() - start,
+    })
+  }
+}
+
+async function runBattle(battleId: string, battle: Battle, problem: typeof problems[0]) {
+  battle.status = 'running'
+  activeBattles.set(battleId, battle)
+
+  battle.modelAResult = null
+  battle.modelBResult = null
+
+  console.log(
+    `[battle ${battleId}] runBattle: parallel LLM A=${battle.modelAId} B=${battle.modelBId} problem=${problem.id}`,
+  )
+
+  await Promise.all([
+    runSide(
+      battleId,
+      battle,
+      'A',
+      problem,
+      battle.modelAId,
+      getModelProvider(battle.modelAId),
+    ),
+    runSide(
+      battleId,
+      battle,
+      'B',
+      problem,
+      battle.modelBId,
+      getModelProvider(battle.modelBId),
+    ),
+  ])
+
+  console.log(`[battle ${battleId}] both sides finished LLM pipeline -> status awaiting_client`)
+
+  battle.status = 'awaiting_client'
+  tryFinishBattle(battle)
+  activeBattles.set(battleId, battle)
 }
 
 battlesRouter.post('/', async (c) => {
@@ -57,7 +226,7 @@ battlesRouter.post('/', async (c) => {
     problemId,
     modelAId,
     modelBId,
-    status: 'pending',
+    status: 'running',
     modelAResult: null,
     modelBResult: null,
     createdAt: new Date().toISOString(),
@@ -66,96 +235,75 @@ battlesRouter.post('/', async (c) => {
 
   activeBattles.set(battleId, battle)
 
-  runBattle(battleId, battle, problem)
+  console.log(
+    `[battle ${battleId}] POST accepted problem=${problemId} modelA=${modelAId} modelB=${modelBId} -> background runBattle`,
+  )
+
+  void runBattle(battleId, battle, problem)
 
   return c.json({ battle }, 201)
 })
 
-async function runBattle(battleId: string, battle: Battle, problem: typeof problems[0]) {
-  battle.status = 'running'
-  activeBattles.set(battleId, battle)
+battlesRouter.post('/:id/official', async (c) => {
+  const id = c.req.param('id')
+  const battle = activeBattles.get(id)
+  if (!battle) {
+    return c.json({ error: 'Battle not found' }, 404)
+  }
 
-  const providerA = getModelProvider(battle.modelAId)
-  const providerB = getModelProvider(battle.modelBId)
+  const body = await c.req.json() as {
+    side?: string
+    officialResult?: {
+      passed: number
+      total: number
+      timeMs: number
+      details?: OfficialDetail[]
+    }
+  }
 
-  const llmRequest = {
-    model: battle.modelAId,
-    prompt: 'Solve this problem',
-    problem: {
-      title: problem.title,
-      description: problem.description,
-      functionSignature: problem.functionSignature,
+  if (body.side !== 'modelA' && body.side !== 'modelB') {
+    return c.json({ error: 'side must be modelA or modelB' }, 400)
+  }
+  if (!body.officialResult || typeof body.officialResult.passed !== 'number') {
+    return c.json({ error: 'officialResult with passed, total, timeMs required' }, 400)
+  }
+
+  const target = body.side === 'modelA' ? battle.modelAResult : battle.modelBResult
+  if (!target) {
+    return c.json({ error: 'Model result missing' }, 400)
+  }
+  if (target.phase === 'completed' && target.officialResult) {
+    tryFinishBattle(battle)
+    activeBattles.set(id, battle)
+    return c.json({ battle })
+  }
+  if (target.phase !== 'awaiting_execution') {
+    return c.json({ error: 'Model is not awaiting execution results' }, 400)
+  }
+
+  const next: BattleResult = {
+    ...target,
+    officialResult: {
+      passed: body.officialResult.passed,
+      total: body.officialResult.total,
+      timeMs: body.officialResult.timeMs,
+      details: body.officialResult.details,
     },
+    phase: 'completed',
+    status: 'completed',
+    selfTestConclusion: '',
   }
 
-  const startTimeA = Date.now()
-  try {
-    const resultA = await callLLM(providerA, llmRequest)
-    battle.modelAResult = {
-      modelId: battle.modelAId,
-      status: 'completed',
-      thought: resultA.thought,
-      code: resultA.code,
-      selfTestCases: [
-        { input: '[2,7,11,15], 9', expectedOutput: '[0,1]' },
-        { input: '[3,2,4], 6', expectedOutput: '[1,2]' },
-      ],
-      selfTestConclusion: '自测通过',
-      officialResult: { passed: 8, total: 10, timeMs: 45 },
-      timeMs: Date.now() - startTimeA,
-    }
-  } catch (err) {
-    battle.modelAResult = {
-      modelId: battle.modelAId,
-      status: 'failed',
-      thought: '',
-      code: '',
-      selfTestCases: [],
-      selfTestConclusion: '',
-      officialResult: { passed: 0, total: 10, timeMs: 0 },
-      timeMs: Date.now() - startTimeA,
-      error: err instanceof Error ? err.message : 'Unknown error',
-    }
-  }
-  activeBattles.set(battleId, battle)
-
-  const startTimeB = Date.now()
-  try {
-    const resultB = await callLLM(providerB, {
-      ...llmRequest,
-      model: battle.modelBId,
-    })
-    battle.modelBResult = {
-      modelId: battle.modelBId,
-      status: 'completed',
-      thought: resultB.thought,
-      code: resultB.code,
-      selfTestCases: [
-        { input: '[2,7,11,15], 9', expectedOutput: '[0,1]' },
-        { input: '[3,2,4], 6', expectedOutput: '[1,2]' },
-      ],
-      selfTestConclusion: '自测通过',
-      officialResult: { passed: 10, total: 10, timeMs: 38 },
-      timeMs: Date.now() - startTimeB,
-    }
-  } catch (err) {
-    battle.modelBResult = {
-      modelId: battle.modelBId,
-      status: 'failed',
-      thought: '',
-      code: '',
-      selfTestCases: [],
-      selfTestConclusion: '',
-      officialResult: { passed: 0, total: 10, timeMs: 0 },
-      timeMs: Date.now() - startTimeB,
-      error: err instanceof Error ? err.message : 'Unknown error',
-    }
+  if (body.side === 'modelA') {
+    battle.modelAResult = next
+  } else {
+    battle.modelBResult = next
   }
 
-  battle.status = 'completed'
-  battle.completedAt = new Date().toISOString()
-  activeBattles.set(battleId, battle)
-}
+  tryFinishBattle(battle)
+  activeBattles.set(id, battle)
+  return c.json({ battle })
+})
 
 battlesRouter.get('/:id', (c) => {
   const id = c.req.param('id')
