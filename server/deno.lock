@@ -1,0 +1,16 @@
+{
+  "version": "4",
+  "specifiers": {
+    "jsr:@hono/hono@4.5.0": "4.5.0"
+  },
+  "jsr": {
+    "@hono/hono@4.5.0": {
+      "integrity": "4a410f7773ac4b5b0eb4520b26c7ab7795a271d57a9df7fa1953ded6b90ccaf7"
+    }
+  },
+  "workspace": {
+    "dependencies": [
+      "jsr:@hono/hono@4.5.0"
+    ]
+  }
+}

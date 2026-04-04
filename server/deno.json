@@ -1,0 +1,10 @@
+{
+  "imports": {
+    "hono": "jsr:@hono/hono@4.5.0"
+  },
+  "tasks": {
+    "dev": "deno run --allow-net --allow-env --allow-read --watch --env-file=.env src/main.ts",
+    "start": "deno run --allow-net --allow-env --allow-read --env-file=.env src/main.ts",
+    "test": "deno test"
+  }
+}
