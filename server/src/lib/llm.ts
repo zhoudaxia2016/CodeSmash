@@ -286,6 +286,8 @@ ${functionSignature}
 - 测试框架会依据该声明和题目描述调用 ${entryPoint}。
 - 允许少量顶层辅助函数，但已声明的函数必须与上述完全一致。
 - 除非为清晰起见需要短代码块，否则不要用 Markdown 代码围栏包裹整个解法；优先输出原始顶层 JavaScript。
+- 不要用一对双引号 \`"\` 或单引号 \`'\` 把整段回复（推理与代码合在一起）包成字符串字面量；不要用「整段 JSON 字符串」或转义后的源码形式输出。
+- 可执行部分必须直接以源码出现：行首应是 \`function\`（或允许的顶层声明），不要在 \`function\` 前多加引号或把 \`function ${entryPoint}\` 放进字符串里。
 - 使用普通顶层函数；不要 export 模块，也不要把要求的函数包在对象里。
 - 只输出恰好一个完整的顶层 \`function ${entryPoint}\`（或与签名匹配的唯一声明）。不要为同一入口函数输出两份完整实现。
 - 若 API 提供单独的推理通道，请在那里做规划；主消息流保持为可运行程序。`
@@ -335,7 +337,8 @@ ${problem.functionSignature}`
 
   const codeUser =
     `请写出 JavaScript 实现：仅一个符合签名的 ${problem.entryPoint}，不要重复实现。` +
-    `基于你上文的分析完成实现；不要在输出中重复大段说明文字。`
+    `基于你上文的分析完成实现；不要在输出中重复大段说明文字。` +
+    `直接输出可执行源码，不要在整段外加双引号或单引号，不要用字符串包裹 function。`
 
   const logLabel = options.logLabel ? `${options.logLabel} code` : 'code'
   yield* streamChat(provider, platformModelId, [
