@@ -2,50 +2,78 @@
 @tailwind components;
 @tailwind utilities;
 
+/**
+ * Deep neutral canvas + indigo/violet primary (shadcn HSL triplets).
+ */
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 0 0% 3.9%;
-    --card: 0 0% 100%;
-    --card-foreground: 0 0% 3.9%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 0 0% 3.9%;
-    --primary: 0 0% 9%;
-    --primary-foreground: 0 0% 98%;
-    --secondary: 0 0% 96.1%;
-    --secondary-foreground: 0 0% 9%;
-    --muted: 0 0% 96.1%;
-    --muted-foreground: 0 0% 45.1%;
-    --accent: 0 0% 96.1%;
-    --accent-foreground: 0 0% 9%;
-    --destructive: 0 84.2% 60.2%;
+    --background: 40 14% 97%;
+    --foreground: 240 8% 8%;
+    --card: 40 12% 99%;
+    --card-foreground: 240 8% 8%;
+    --popover: 40 12% 99%;
+    --popover-foreground: 240 8% 8%;
+    --primary: 262 83% 52%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 40 10% 93%;
+    --secondary-foreground: 240 8% 12%;
+    --muted: 40 8% 92%;
+    --muted-foreground: 240 4% 42%;
+    --accent: 40 10% 91%;
+    --accent-foreground: 240 8% 12%;
+    --destructive: 0 72% 48%;
     --destructive-foreground: 0 0% 98%;
-    --border: 0 0% 89.8%;
-    --input: 0 0% 89.8%;
-    --ring: 0 0% 3.9%;
-    --radius: 0.5rem;
+    --border: 40 8% 88%;
+    --input: 40 8% 88%;
+    --ring: 262 83% 52%;
+    --radius: 0.625rem;
+
+    /* Arena-adjacent layout tokens (raw HSL triplets) */
+    --arena-sidebar: 40 10% 94%;
+    --arena-sidebar-foreground: 240 6% 28%;
+    --arena-sidebar-border: 40 8% 86%;
+    --arena-sidebar-active: 40 12% 88%;
+    --arena-sidebar-active-fg: 240 8% 8%;
+    --arena-accent: 262 83% 52%;
+    --arena-accent-soft: 262 62% 94%;
+    --arena-header-blur: 40 14% 97%;
+    --arena-card-shadow: 240 8% 8%;
+    --arena-code-bg: 240 8% 12%;
+    --arena-code-fg: 142 70% 45%;
   }
 
   .dark {
-    --background: 0 0% 3.9%;
-    --foreground: 0 0% 98%;
-    --card: 0 0% 3.9%;
-    --card-foreground: 0 0% 98%;
-    --popover: 0 0% 3.9%;
-    --popover-foreground: 0 0% 98%;
-    --primary: 0 0% 98%;
-    --primary-foreground: 0 0% 9%;
-    --secondary: 0 0% 14.9%;
-    --secondary-foreground: 0 0% 98%;
-    --muted: 0 0% 14.9%;
-    --muted-foreground: 0 0% 63.9%;
-    --accent: 0 0% 14.9%;
-    --accent-foreground: 0 0% 98%;
-    --destructive: 0 62.8% 30.6%;
+    --background: 240 6% 5%;
+    --foreground: 0 0% 96%;
+    --card: 240 5% 8%;
+    --card-foreground: 0 0% 96%;
+    --popover: 240 5% 9%;
+    --popover-foreground: 0 0% 96%;
+    --primary: 258 86% 64%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 240 4% 14%;
+    --secondary-foreground: 0 0% 96%;
+    --muted: 240 4% 14%;
+    --muted-foreground: 240 4% 58%;
+    --accent: 240 5% 14%;
+    --accent-foreground: 0 0% 96%;
+    --destructive: 0 62% 42%;
     --destructive-foreground: 0 0% 98%;
-    --border: 0 0% 14.9%;
-    --input: 0 0% 14.9%;
-    --ring: 0 0% 83.1%;
+    --border: 240 4% 16%;
+    --input: 240 4% 16%;
+    --ring: 258 86% 64%;
+
+    --arena-sidebar: 240 6% 6%;
+    --arena-sidebar-foreground: 240 4% 62%;
+    --arena-sidebar-border: 240 5% 14%;
+    --arena-sidebar-active: 240 5% 12%;
+    --arena-sidebar-active-fg: 0 0% 98%;
+    --arena-accent: 258 86% 64%;
+    --arena-accent-soft: 258 35% 16%;
+    --arena-header-blur: 240 6% 5%;
+    --arena-card-shadow: 0 0% 0%;
+    --arena-code-bg: 240 8% 4%;
+    --arena-code-fg: 142 71% 45%;
   }
 }
 
@@ -54,6 +82,7 @@
     @apply border-border;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "rlig" 1, "calt" 1;
   }
 }
