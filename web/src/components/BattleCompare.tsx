@@ -219,12 +219,11 @@ function CodeCell({
   const thinking = sanitizeCodingThoughtForDisplay(split.thinking)
   const codeForHighlight = stripCodeFences(split.code)
 
-  const [thinkingOpen, setThinkingOpen] = useState(true)
-  useEffect(() => {
-    setThinkingOpen(true)
-  }, [battleId])
-
   const codeStreaming = displayResult.phase === 'coding'
+  const [thinkingOpen, setThinkingOpen] = useState(() => codeStreaming)
+  useEffect(() => {
+    setThinkingOpen(displayResult.phase === 'coding')
+  }, [battleId, displayResult.phase])
   const codePhaseScroll = useStickToBottomScroll({
     resetKey: battleId,
     force: codeStreaming,
