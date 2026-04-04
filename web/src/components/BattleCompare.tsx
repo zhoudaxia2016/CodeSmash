@@ -23,11 +23,16 @@ function rawCodeStillHasThinkingXml(raw: string): boolean {
   )
 }
 
-/**
- * 分析 / 代码 / 官方用例：同一 max-height（原分析高度的 2 倍）+ 单滚动条，双列对齐。
- */
-const PHASE_CARD_SCROLL =
-  'min-h-0 max-h-[min(84vh,44rem)] overflow-y-auto overflow-x-hidden'
+/** 同阶段两列共用的最大高度；滚动条在列内各自出现 */
+const PHASE_MAX_H = 'max-h-[min(84vh,44rem)]'
+
+const PHASE_CARD_OUTER = `flex min-h-0 ${PHASE_MAX_H} flex-1 flex-col overflow-hidden rounded-lg border border-border/80 bg-card/50`
+
+const PHASE_CARD_INNER_SCROLL = 'min-h-0 flex-1 overflow-y-auto overflow-x-hidden'
+
+/** 并排阶段行：两列同高（stretch），每列内部独立滚动 */
+const PHASE_PAIR_GRID =
+  'grid min-h-0 grid-cols-1 items-stretch gap-4 sm:grid-cols-2 sm:gap-8'
 
 /** 代码块内层：不再加 border（外层卡片已有一圈），仅底色与横向滚动 */
 const CODE_BLOCK_INNER = 'rounded-md bg-muted/20 p-3 overflow-x-auto'
@@ -128,32 +133,6 @@ type ModelSideHook = ReturnType<typeof useBattleModelSide>
 
 type ColumnHeaderProps = { label: string; hook: ModelSideHook }
 
-type ModelColumnProps = ColumnHeaderProps & { battleId: string }
-
-function ModelColumn({ battleId, label, hook }: ModelColumnProps) {
-  return (
-    <div className="flex h-full min-h-0 min-w-0 flex-col gap-4">
-      <ColumnHeader label={label} hook={hook} />
-      <div className="flex min-h-0 flex-col gap-2">
-        <PhaseColumnHeading>1 · 分析</PhaseColumnHeading>
-        <AnalysisCell battleId={battleId} hook={hook} />
-      </div>
-      {hook.showCodePhase && (
-        <div className="flex min-h-0 flex-col gap-2">
-          <PhaseColumnHeading>2 · 代码</PhaseColumnHeading>
-          <CodeCell battleId={battleId} hook={hook} />
-        </div>
-      )}
-      {hook.showOfficialPhase && (
-        <div className="flex min-h-0 flex-col gap-2">
-          <PhaseColumnHeading>3 · 执行测试</PhaseColumnHeading>
-          <OfficialCell hook={hook} />
-        </div>
-      )}
-    </div>
-  )
-}
-
 function ColumnHeader({ label, hook }: ColumnHeaderProps) {
   const { displayResult, ok, failedLlm } = hook
   return (
@@ -174,6 +153,19 @@ function ColumnHeader({ label, hook }: ColumnHeaderProps) {
   )
 }
 
+/** 同阶段另一侧尚未进入时占满格高，与对侧卡片对齐 */
+function PhasePairedPlaceholder({ children }: { children: ReactNode }) {
+  return (
+    <div className="flex h-full min-h-0 min-w-0 flex-col">
+      <div
+        className={`flex min-h-[5rem] flex-1 flex-col justify-center overflow-hidden rounded-lg border border-dashed border-border/50 bg-muted/10 px-3 py-4 text-center text-sm text-muted-foreground ${PHASE_MAX_H}`}
+      >
+        {children}
+      </div>
+    </div>
+  )
+}
+
 function AnalysisCell({ battleId, hook }: { battleId: string; hook: ModelSideHook }) {
   const { displayResult, failedLlm, showAnalysis } = hook
   const thought = sanitizeCodingThoughtForDisplay(displayResult.thought ?? '')
@@ -185,22 +177,26 @@ function AnalysisCell({ battleId, hook }: { battleId: string; hook: ModelSideHoo
   })
 
   return (
-    <div
-      ref={analysisScroll.ref}
-      onScroll={analysisScroll.onScroll}
-      className={`rounded-lg border border-border/80 bg-card/50 ${PHASE_CARD_SCROLL}`}
-    >
-      {failedLlm && hook.result.error && (
-        <p className="text-sm text-red-600 dark:text-red-400 px-3 pt-3">{hook.result.error}</p>
-      )}
-      {displayResult.phase === 'analyzing' && !String(thought).trim() && (
-        <p className="text-sm text-muted-foreground px-3 py-3">正在生成分析…</p>
-      )}
-      {showAnalysis && String(thought).trim() && (
-        <div className="border-l-[3px] border-l-primary/45 px-3 py-3 sm:pl-4">
-          <SolutionMarkdown content={thought} className="thinking-md" />
+    <div className="flex h-full min-h-0 min-w-0 flex-col">
+      <div className={PHASE_CARD_OUTER}>
+        <div
+          ref={analysisScroll.ref}
+          onScroll={analysisScroll.onScroll}
+          className={PHASE_CARD_INNER_SCROLL}
+        >
+          {failedLlm && hook.result.error && (
+            <p className="text-sm text-red-600 dark:text-red-400 px-3 pt-3">{hook.result.error}</p>
+          )}
+          {displayResult.phase === 'analyzing' && !String(thought).trim() && (
+            <p className="text-sm text-muted-foreground px-3 py-3">正在生成分析…</p>
+          )}
+          {showAnalysis && String(thought).trim() && (
+            <div className="border-l-[3px] border-l-primary/45 px-3 py-3 sm:pl-4">
+              <SolutionMarkdown content={thought} className="thinking-md" />
+            </div>
+          )}
         </div>
-      )}
+      </div>
     </div>
   )
 }
@@ -236,46 +232,50 @@ function CodeCell({
   })
 
   return (
-    <div
-      ref={codePhaseScroll.ref}
-      onScroll={codePhaseScroll.onScroll}
-      className={`rounded-lg border border-border/80 bg-card/50 ${PHASE_CARD_SCROLL}`}
-    >
-      {displayResult.phase === 'coding' && !raw && (
-        <p className="text-sm text-muted-foreground px-3 py-3">正在生成代码…</p>
-      )}
-      {showCode && raw && (
-        <div className="space-y-4 p-3">
-          {thinking ? (
-            <details
-              className="group overflow-hidden"
-              open={thinkingOpen}
-              onToggle={(e) => setThinkingOpen(e.currentTarget.open)}
-            >
-              <summary className="cursor-pointer select-none list-none rounded-md px-2 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted/20 [&::-webkit-details-marker]:hidden">
-                <span className="text-muted-foreground font-normal">可折叠 · </span>
-                思考
-              </summary>
-              <div className="mt-2 border-l-[3px] border-l-primary/45 py-1 pl-3 sm:pl-4">
-                <SolutionMarkdown content={thinking} className="thinking-md" />
-              </div>
-            </details>
-          ) : null}
-          {codeForHighlight ? (
-            <div className={CODE_BLOCK_INNER}>
-              <JavaScriptCodeBlock
-                code={codeForHighlight}
-                className="m-0 overflow-x-auto whitespace-pre-wrap break-words font-mono text-sm leading-relaxed text-foreground"
-              />
+    <div className="flex h-full min-h-0 min-w-0 flex-col">
+      <div className={PHASE_CARD_OUTER}>
+        <div
+          ref={codePhaseScroll.ref}
+          onScroll={codePhaseScroll.onScroll}
+          className={PHASE_CARD_INNER_SCROLL}
+        >
+          {displayResult.phase === 'coding' && !raw && (
+            <p className="text-sm text-muted-foreground px-3 py-3">正在生成代码…</p>
+          )}
+          {showCode && raw && (
+            <div className="space-y-4 p-3">
+              {thinking ? (
+                <details
+                  className="group overflow-hidden"
+                  open={thinkingOpen}
+                  onToggle={(e) => setThinkingOpen(e.currentTarget.open)}
+                >
+                  <summary className="cursor-pointer select-none list-none rounded-md px-2 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted/20 [&::-webkit-details-marker]:hidden">
+                    <span className="text-muted-foreground font-normal">可折叠 · </span>
+                    思考
+                  </summary>
+                  <div className="mt-2 border-l-[3px] border-l-primary/45 py-1 pl-3 sm:pl-4">
+                    <SolutionMarkdown content={thinking} className="thinking-md" />
+                  </div>
+                </details>
+              ) : null}
+              {codeForHighlight ? (
+                <div className={CODE_BLOCK_INNER}>
+                  <JavaScriptCodeBlock
+                    code={codeForHighlight}
+                    className="m-0 overflow-x-auto whitespace-pre-wrap break-words font-mono text-sm leading-relaxed text-foreground"
+                  />
+                </div>
+              ) : thinking ? (
+                <p className="text-sm text-muted-foreground">暂无独立代码块（仅含思考过程时可展开上方查看）</p>
+              ) : null}
             </div>
-          ) : thinking ? (
-            <p className="text-sm text-muted-foreground">暂无独立代码块（仅含思考过程时可展开上方查看）</p>
-          ) : null}
+          )}
+          {displayResult.selfTestConclusion && !displayResult.officialResult && (
+            <p className="mt-1 px-3 pb-3 text-xs text-muted-foreground">{displayResult.selfTestConclusion}</p>
+          )}
         </div>
-      )}
-      {displayResult.selfTestConclusion && !displayResult.officialResult && (
-        <p className="mt-1 px-3 pb-3 text-xs text-muted-foreground">{displayResult.selfTestConclusion}</p>
-      )}
+      </div>
     </div>
   )
 }
@@ -303,9 +303,9 @@ function OfficialCell({ hook }: { hook: ReturnType<typeof useBattleModelSide> })
     (displayResult.timeMs ?? 0) > 0
 
   return (
-    <div
-      className={`rounded-lg border border-border/80 bg-card/50 p-3 space-y-2 ${PHASE_CARD_SCROLL}`}
-    >
+    <div className="flex h-full min-h-0 min-w-0 flex-col">
+      <div className={PHASE_CARD_OUTER}>
+        <div className={`${PHASE_CARD_INNER_SCROLL} space-y-2 p-3`}>
       {modelTimingVisible && !showOfficialSection && (
         <div className="flex flex-wrap items-center gap-x-2 px-2 pt-1">
           <CompactOfficialTiming r={displayResult} runningOfficial={runningOfficial} />
@@ -442,6 +442,8 @@ function OfficialCell({ hook }: { hook: ReturnType<typeof useBattleModelSide> })
           )}
         </div>
       )}
+        </div>
+      </div>
     </div>
   )
 }
@@ -551,9 +553,55 @@ export function BattleCompare({
         runDoneA={hookA.runProgress?.done}
         runDoneB={hookB.runProgress?.done}
       />
-      <div className="grid min-h-0 grid-cols-1 gap-y-8 sm:grid-cols-2 sm:gap-x-8 sm:gap-y-0 sm:items-stretch">
-        <ModelColumn battleId={battleId} label={modelAName} hook={hookA} />
-        <ModelColumn battleId={battleId} label={modelBName} hook={hookB} />
+      <div className="flex min-h-0 min-w-0 flex-col gap-8">
+        <div className={`grid min-h-0 grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-8`}>
+          <ColumnHeader label={modelAName} hook={hookA} />
+          <ColumnHeader label={modelBName} hook={hookB} />
+        </div>
+
+        <section className="flex min-h-0 min-w-0 flex-col gap-2">
+          <PhaseColumnHeading>1 · 分析</PhaseColumnHeading>
+          <div className={PHASE_PAIR_GRID}>
+            <AnalysisCell battleId={battleId} hook={hookA} />
+            <AnalysisCell battleId={battleId} hook={hookB} />
+          </div>
+        </section>
+
+        {(hookA.showCodePhase || hookB.showCodePhase) && (
+          <section className="flex min-h-0 min-w-0 flex-col gap-2">
+            <PhaseColumnHeading>2 · 代码</PhaseColumnHeading>
+            <div className={PHASE_PAIR_GRID}>
+              {hookA.showCodePhase ? (
+                <CodeCell battleId={battleId} hook={hookA} />
+              ) : (
+                <PhasePairedPlaceholder>等待分析完成…</PhasePairedPlaceholder>
+              )}
+              {hookB.showCodePhase ? (
+                <CodeCell battleId={battleId} hook={hookB} />
+              ) : (
+                <PhasePairedPlaceholder>等待分析完成…</PhasePairedPlaceholder>
+              )}
+            </div>
+          </section>
+        )}
+
+        {(hookA.showOfficialPhase || hookB.showOfficialPhase) && (
+          <section className="flex min-h-0 min-w-0 flex-col gap-2">
+            <PhaseColumnHeading>3 · 执行测试</PhaseColumnHeading>
+            <div className={PHASE_PAIR_GRID}>
+              {hookA.showOfficialPhase ? (
+                <OfficialCell hook={hookA} />
+              ) : (
+                <PhasePairedPlaceholder>等待代码阶段完成…</PhasePairedPlaceholder>
+              )}
+              {hookB.showOfficialPhase ? (
+                <OfficialCell hook={hookB} />
+              ) : (
+                <PhasePairedPlaceholder>等待代码阶段完成…</PhasePairedPlaceholder>
+              )}
+            </div>
+          </section>
+        )}
       </div>
     </>
   )
