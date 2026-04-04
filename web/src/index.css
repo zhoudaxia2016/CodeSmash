@@ -3,77 +3,83 @@
 @tailwind utilities;
 
 /**
- * Deep neutral canvas + indigo/violet primary (shadcn HSL triplets).
+ * Better Stack–style dark UI (hero reference): #0b0b14 canvas, #1e1e2d surfaces,
+ * #2d2d39 borders, slate secondary text, indigo/violet CTA (#6366f1 / #7c3aed).
  */
 @layer base {
   :root {
-    --background: 40 14% 97%;
-    --foreground: 240 8% 8%;
-    --card: 40 12% 99%;
-    --card-foreground: 240 8% 8%;
-    --popover: 40 12% 99%;
-    --popover-foreground: 240 8% 8%;
-    --primary: 262 83% 52%;
+    --background: 0 0% 99%;
+    --foreground: 240 15% 9%;
+    --card: 0 0% 100%;
+    --card-foreground: 240 15% 9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 15% 9%;
+    --primary: 239 76% 53%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 40 10% 93%;
-    --secondary-foreground: 240 8% 12%;
-    --muted: 40 8% 92%;
-    --muted-foreground: 240 4% 42%;
-    --accent: 40 10% 91%;
-    --accent-foreground: 240 8% 12%;
+    --secondary: 240 6% 94%;
+    --secondary-foreground: 240 10% 12%;
+    --muted: 240 6% 93%;
+    --muted-foreground: 215 16% 44%;
+    --accent: 240 6% 92%;
+    --accent-foreground: 240 10% 12%;
     --destructive: 0 72% 48%;
     --destructive-foreground: 0 0% 98%;
-    --border: 40 8% 88%;
-    --input: 40 8% 88%;
-    --ring: 262 83% 52%;
-    --radius: 0.625rem;
+    --border: 240 8% 88%;
+    --input: 240 8% 88%;
+    --ring: 239 76% 53%;
+    --radius: 0.5rem;
 
     /* Arena-adjacent layout tokens (raw HSL triplets) */
-    --arena-sidebar: 40 10% 94%;
-    --arena-sidebar-foreground: 240 6% 28%;
-    --arena-sidebar-border: 40 8% 86%;
-    --arena-sidebar-active: 40 12% 88%;
-    --arena-sidebar-active-fg: 240 8% 8%;
-    --arena-accent: 262 83% 52%;
-    --arena-accent-soft: 262 62% 94%;
-    --arena-header-blur: 40 14% 97%;
-    --arena-card-shadow: 240 8% 8%;
-    --arena-code-bg: 240 8% 12%;
-    --arena-code-fg: 142 70% 45%;
+    --arena-sidebar: 240 8% 96%;
+    --arena-sidebar-foreground: 215 14% 38%;
+    --arena-sidebar-border: 240 8% 88%;
+    --arena-sidebar-active: 240 10% 91%;
+    --arena-sidebar-active-fg: 240 15% 9%;
+    --arena-accent: 239 76% 53%;
+    --arena-accent-soft: 239 62% 94%;
+    --arena-header-blur: 0 0% 99%;
+    --arena-card-shadow: 240 20% 8%;
+    --arena-code-bg: 240 18% 14%;
+    --arena-code-fg: 158 48% 46%;
   }
 
   .dark {
-    --background: 240 6% 5%;
-    --foreground: 0 0% 96%;
-    --card: 240 5% 8%;
-    --card-foreground: 0 0% 96%;
-    --popover: 240 5% 9%;
-    --popover-foreground: 0 0% 96%;
-    --primary: 258 86% 64%;
+    /* ~#0b0b14 */
+    --background: 240 29% 6%;
+    --foreground: 0 0% 100%;
+    /* ~#1e1e2d */
+    --card: 240 20% 15%;
+    --card-foreground: 0 0% 100%;
+    --popover: 240 20% 14%;
+    --popover-foreground: 0 0% 100%;
+    /* indigo-500 */
+    --primary: 239 84% 67%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 240 4% 14%;
-    --secondary-foreground: 0 0% 96%;
-    --muted: 240 4% 14%;
-    --muted-foreground: 240 4% 58%;
-    --accent: 240 5% 14%;
-    --accent-foreground: 0 0% 96%;
+    --secondary: 240 16% 12%;
+    --secondary-foreground: 0 0% 98%;
+    --muted: 240 16% 12%;
+    /* ~#94a3b8 */
+    --muted-foreground: 215 16% 57%;
+    --accent: 240 18% 13%;
+    --accent-foreground: 0 0% 100%;
     --destructive: 0 62% 42%;
     --destructive-foreground: 0 0% 98%;
-    --border: 240 4% 16%;
-    --input: 240 4% 16%;
-    --ring: 258 86% 64%;
+    /* ~#2d2d39 */
+    --border: 240 12% 20%;
+    --input: 240 12% 20%;
+    --ring: 239 84% 67%;
 
-    --arena-sidebar: 240 6% 6%;
-    --arena-sidebar-foreground: 240 4% 62%;
-    --arena-sidebar-border: 240 5% 14%;
-    --arena-sidebar-active: 240 5% 12%;
-    --arena-sidebar-active-fg: 0 0% 98%;
-    --arena-accent: 258 86% 64%;
-    --arena-accent-soft: 258 35% 16%;
-    --arena-header-blur: 240 6% 5%;
+    --arena-sidebar: 240 27% 7%;
+    --arena-sidebar-foreground: 215 16% 57%;
+    --arena-sidebar-border: 240 12% 20%;
+    --arena-sidebar-active: 240 18% 13%;
+    --arena-sidebar-active-fg: 0 0% 100%;
+    --arena-accent: 239 84% 67%;
+    --arena-accent-soft: 258 42% 22%;
+    --arena-header-blur: 240 29% 6%;
     --arena-card-shadow: 0 0% 0%;
-    --arena-code-bg: 240 8% 4%;
-    --arena-code-fg: 142 71% 45%;
+    --arena-code-bg: 240 26% 5%;
+    --arena-code-fg: 158 52% 54%;
   }
 }
 
@@ -138,48 +144,48 @@
  * Tree-sitter highlight (JavaScript). Unlayered so span colors beat Tailwind utilities on the parent <pre>.
  */
 .code-highlight-root .hl-keyword {
-  color: hsl(258 82% 74%);
+  color: hsl(239 78% 72%);
 }
 .code-highlight-root .hl-string,
 .code-highlight-root .hl-string-special {
-  color: hsl(142 55% 58%);
+  color: hsl(152 48% 58%);
 }
 .code-highlight-root .hl-comment {
-  color: hsl(240 6% 52%);
+  color: hsl(215 14% 52%);
   font-style: italic;
 }
 .code-highlight-root .hl-number {
-  color: hsl(32 90% 68%);
+  color: hsl(38 88% 66%);
 }
 .code-highlight-root .hl-function,
 .code-highlight-root .hl-function-method,
 .code-highlight-root .hl-function-builtin {
-  color: hsl(210 75% 72%);
+  color: hsl(199 70% 70%);
 }
 .code-highlight-root .hl-variable-builtin,
 .code-highlight-root .hl-constant-builtin {
-  color: hsl(280 65% 72%);
+  color: hsl(263 62% 72%);
 }
 .code-highlight-root .hl-constant,
 .code-highlight-root .hl-constructor {
-  color: hsl(45 88% 68%);
+  color: hsl(48 82% 68%);
 }
 .code-highlight-root .hl-property {
-  color: hsl(195 70% 72%);
+  color: hsl(188 58% 66%);
 }
 .code-highlight-root .hl-variable {
   color: hsl(var(--arena-code-fg));
 }
 .code-highlight-root .hl-operator {
-  color: hsl(340 70% 72%);
+  color: hsl(330 58% 72%);
 }
 .code-highlight-root .hl-punctuation-bracket,
 .code-highlight-root .hl-punctuation-delimiter,
 .code-highlight-root .hl-punctuation-special {
-  color: hsl(240 8% 72%);
+  color: hsl(240 10% 62%);
 }
 .code-highlight-root .hl-embedded {
-  color: hsl(168 60% 62%);
+  color: hsl(172 52% 60%);
 }
 
 /* Markdown solution panel: fenced code (highlight.js puts .hljs on <code>) */
