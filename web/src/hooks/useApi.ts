@@ -26,11 +26,11 @@ export function useProblems() {
   })
 }
 
-export function useProblem(id: string) {
+export function useProblem(id: string, options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: ['problems', id],
     queryFn: () => api.getProblem(id),
-    enabled: !!id,
+    enabled: options?.enabled !== undefined ? options.enabled : !!id,
   })
 }
 
@@ -59,19 +59,11 @@ export function useDeleteProblem() {
   })
 }
 
-export function useTestCases(problemId: string) {
-  return useQuery({
-    queryKey: ['testCases', problemId],
-    queryFn: () => api.getTestCases(problemId),
-    enabled: !!problemId,
-  })
-}
-
 export function useGenerateTestCases() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (problemId: string) => api.generateTestCases(problemId),
-    onSuccess: (_, problemId) => queryClient.invalidateQueries({ queryKey: ['testCases', problemId] }),
+    onSuccess: (_, problemId) => queryClient.invalidateQueries({ queryKey: ['problems', problemId] }),
   })
 }
 
@@ -80,7 +72,7 @@ export function useCreateTestCase() {
   return useMutation({
     mutationFn: ({ problemId, data }: { problemId: string; data: Parameters<typeof api.createTestCase>[1] }) =>
       api.createTestCase(problemId, data),
-    onSuccess: (_, { problemId }) => queryClient.invalidateQueries({ queryKey: ['testCases', problemId] }),
+    onSuccess: (_, { problemId }) => queryClient.invalidateQueries({ queryKey: ['problems', problemId] }),
   })
 }
 
@@ -89,7 +81,7 @@ export function useUpdateTestCase() {
   return useMutation({
     mutationFn: ({ problemId, testCaseId, data }: { problemId: string; testCaseId: string; data: Parameters<typeof api.updateTestCase>[2] }) =>
       api.updateTestCase(problemId, testCaseId, data),
-    onSuccess: (_, { problemId }) => queryClient.invalidateQueries({ queryKey: ['testCases', problemId] }),
+    onSuccess: (_, { problemId }) => queryClient.invalidateQueries({ queryKey: ['problems', problemId] }),
   })
 }
 
@@ -98,7 +90,7 @@ export function useDeleteTestCase() {
   return useMutation({
     mutationFn: ({ problemId, testCaseId }: { problemId: string; testCaseId: string }) =>
       api.deleteTestCase(problemId, testCaseId),
-    onSuccess: (_, { problemId }) => queryClient.invalidateQueries({ queryKey: ['testCases', problemId] }),
+    onSuccess: (_, { problemId }) => queryClient.invalidateQueries({ queryKey: ['problems', problemId] }),
   })
 }
 
@@ -111,12 +103,27 @@ export function useStartBattle() {
   })
 }
 
+type BattleQueryPayload = { battle: import('../types').BattleSession }
+
 export function useBattle(battleId: string) {
   return useQuery({
     queryKey: ['battles', battleId],
     queryFn: () => api.getBattle(battleId),
     enabled: !!battleId,
-    refetchInterval: (query) => query.state.data?.battle?.status === 'running' || query.state.data?.battle?.status === 'pending' ? 2000 : false,
+    retry: 2,
+    retryDelay: (attempt) => Math.min(1500 * 2 ** attempt, 8000),
+    /** Interval refetch only runs while the tab is focused unless this is true. */
+    refetchIntervalInBackground: true,
+    refetchInterval: (query) => {
+      /** `query.state.data` is the raw queryFn result, not `select` output. */
+      const b = (query.state.data as BattleQueryPayload | undefined)?.battle
+      if (!b) return false
+      const active =
+        b.status === 'pending' ||
+        b.status === 'running' ||
+        b.status === 'awaiting_client'
+      return active ? 650 : false
+    },
     select: (data) => data.battle,
   })
 }

@@ -6,6 +6,13 @@ const RATE_LIMIT_MAX = 60
 const requestCounts = new Map<string, { count: number; resetAt: number }>()
 
 export const rateLimit: MiddlewareHandler = async (c, next) => {
+  const pathname = new URL(c.req.url).pathname
+  /** Battle GET is polled ~every 650ms during a run; global 60/min would 429 and freeze the UI on stale snapshots. */
+  if (c.req.method === 'GET' && /^\/api\/battles\/[^/]+/.test(pathname)) {
+    await next()
+    return
+  }
+
   const ip = c.req.header('x-forwarded-for') || c.req.header('cf-connecting-ip') || 'unknown'
   const now = Date.now()
 

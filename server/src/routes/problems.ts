@@ -1,4 +1,5 @@
 import { Hono } from 'hono'
+import { officialTestCasesByProblem } from '../data/problemTestCases.ts'
 
 const problemsRouter = new Hono()
 
@@ -49,7 +50,8 @@ problemsRouter.get('/:id', (c) => {
   if (!problem) {
     return c.json({ error: 'Problem not found' }, 404)
   }
-  return c.json({ problem })
+  const testCases = officialTestCasesByProblem[id] ?? []
+  return c.json({ problem, testCases })
 })
 
 problemsRouter.post('/', async (c) => {

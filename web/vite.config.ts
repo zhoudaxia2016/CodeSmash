@@ -4,6 +4,18 @@ import path from 'path'
 
 export default defineConfig({
   plugins: [react()],
+  assetsInclude: ['**/*.wasm'],
+  optimizeDeps: {
+    // Pre-bundle breaks wasm / import.meta.url resolution for the runtime in dev.
+    exclude: [
+      'web-tree-sitter',
+      'quickjs-emscripten',
+      '@jitl/quickjs-wasmfile-release-sync',
+      '@jitl/quickjs-wasmfile-debug-sync',
+      '@jitl/quickjs-wasmfile-release-asyncify',
+      '@jitl/quickjs-wasmfile-debug-asyncify',
+    ],
+  },
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),

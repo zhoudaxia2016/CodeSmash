@@ -28,12 +28,21 @@ export interface TestCase {
   source: 'manual' | 'generated'
 }
 
+export type ModelPhase =
+  | 'pending'
+  | 'analyzing'
+  | 'coding'
+  | 'awaiting_execution'
+  | 'running_tests'
+  | 'failed'
+  | 'completed'
+
 export interface BattleSession {
   id: string
   problemId: string
   modelAId: string
   modelBId: string
-  status: 'pending' | 'running' | 'completed' | 'partial' | 'failed'
+  status: 'pending' | 'running' | 'awaiting_client' | 'completed' | 'partial' | 'failed'
   modelAResult?: ModelResult
   modelBResult?: ModelResult
   createdAt: string
@@ -42,7 +51,9 @@ export interface BattleSession {
 
 export interface ModelResult {
   modelId: string
-  status: 'pending' | 'thinking' | 'coding' | 'selfTesting' | 'running' | 'completed' | 'error' | 'timeout'
+  status: 'pending' | 'thinking' | 'coding' | 'selfTesting' | 'running' | 'completed' | 'failed' | 'error' | 'timeout'
+  /** Server-driven LLM + client test pipeline stage */
+  phase?: ModelPhase
   thought?: string
   code?: string
   selfTestCases?: SelfTestCase[]
@@ -54,7 +65,10 @@ export interface ModelResult {
     details?: TestResult[]
   }
   error?: string
+  /** 模型输出耗时 = 分析 + 生成代码 */
   timeMs?: number
+  analysisTimeMs?: number
+  codingTimeMs?: number
 }
 
 export interface SelfTestCase {

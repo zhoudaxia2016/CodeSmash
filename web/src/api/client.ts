@@ -21,7 +21,10 @@ export const api = {
     return handleResponse(res)
   },
 
-  async getProblem(id: string): Promise<import('../types').Problem> {
+  async getProblem(id: string): Promise<{
+    problem: import('../types').Problem
+    testCases: import('../types').TestCase[]
+  }> {
     const res = await fetch(`${API_BASE}/problems/${id}`)
     return handleResponse(res)
   },
@@ -47,11 +50,6 @@ export const api = {
   async deleteProblem(id: string): Promise<void> {
     const res = await fetch(`${API_BASE}/problems/${id}`, { method: 'DELETE' })
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
-  },
-
-  async getTestCases(problemId: string): Promise<{ testCases: import('../types').TestCase[] }> {
-    const res = await fetch(`${API_BASE}/problems/${problemId}/test-cases`)
-    return handleResponse(res)
   },
 
   async createTestCase(problemId: string, data: Omit<import('../types').TestCase, 'id' | 'problemId'>): Promise<import('../types').TestCase> {
@@ -88,11 +86,32 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ problemId, modelAId, modelBId }),
     })
-    return handleResponse(res)
+    const data = await handleResponse<{ battle: import('../types').BattleSession }>(res)
+    return data.battle
   },
 
   async getBattle(battleId: string): Promise<{ battle: import('../types').BattleSession }> {
     const res = await fetch(`${API_BASE}/battles/${battleId}`)
+    return handleResponse(res)
+  },
+
+  async submitBattleOfficial(
+    battleId: string,
+    payload: {
+      side: 'modelA' | 'modelB'
+      officialResult: {
+        passed: number
+        total: number
+        timeMs: number
+        details: import('../types').TestResult[]
+      }
+    },
+  ): Promise<{ battle: import('../types').BattleSession }> {
+    const res = await fetch(`${API_BASE}/battles/${battleId}/official`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
     return handleResponse(res)
   },
 

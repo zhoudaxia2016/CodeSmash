@@ -4,6 +4,7 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
+    "postinstall": "node scripts/fetch-tree-sitter-lang-wasm.mjs",
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
@@ -11,16 +12,23 @@
     "test": "vitest"
   },
   "dependencies": {
+    "@jitl/quickjs-wasmfile-release-sync": "0.32.0",
     "@radix-ui/react-select": "^2.2.6",
     "@radix-ui/react-slot": "^1.2.4",
-    "@sebastianwessel/quickjs": "^3.0.1",
+    "@tailwindcss/typography": "^0.5.19",
     "@tanstack/react-query": "^5.56.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "highlight.js": "^11.11.1",
     "lucide-react": "^1.7.0",
+    "quickjs-emscripten": "^0.32.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "react-markdown": "^10.1.0",
+    "rehype-highlight": "^7.0.2",
+    "remark-gfm": "^4.0.1",
     "tailwind-merge": "^3.5.0",
+    "web-tree-sitter": "^0.26.8",
     "zustand": "^5.0.0"
   },
   "devDependencies": {
@@ -35,6 +43,7 @@
     "tailwindcss": "^3.4.10",
     "typescript": "^5.5.4",
     "vite": "^5.4.3",
+    "vite-plugin-node-polyfills": "^0.26.0",
     "vitest": "^2.0.5"
   }
 }
