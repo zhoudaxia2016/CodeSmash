@@ -55,6 +55,8 @@ export interface ModelResult {
   /** Server-driven LLM + client test pipeline stage */
   phase?: ModelPhase
   thought?: string
+  /** Server-split code-phase reasoning; when absent, UI derives from `code` via heuristics. */
+  codingThought?: string
   code?: string
   selfTestCases?: SelfTestCase[]
   selfTestConclusion?: string

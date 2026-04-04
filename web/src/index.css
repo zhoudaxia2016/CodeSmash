@@ -197,5 +197,13 @@
   @apply block p-3 text-sm font-mono leading-relaxed bg-transparent text-inherit;
 }
 .solution-md :not(pre) > code {
-  @apply rounded px-1.5 py-0.5 text-[0.8125rem] font-mono bg-muted text-foreground border border-border/80;
+  @apply rounded-md border border-border/50 bg-muted/50 px-1.5 py-px text-[0.8125rem] font-mono font-normal text-foreground;
+}
+
+/* 分析阶段 Markdown：正文略淡、标题仍清晰 */
+.solution-md.thinking-md :where(h2, h3):first-child {
+  margin-top: 0;
+}
+.solution-md.thinking-md :where(h2, h3) {
+  @apply text-foreground;
 }

@@ -1,9 +1,6 @@
 import { Hono } from 'hono'
-import {
-  streamProblemAnalysis,
-  streamProblemCode,
-  stripCodeFences,
-} from '../lib/llm.ts'
+import { prepareRunnableJavaScript, streamProblemAnalysis, streamProblemCode } from '../lib/llm.ts'
+import { sanitizeModelThoughtMarkdown, splitThinkingFromModelCode } from '../lib/codePhaseSplit.ts'
 import { problems } from './problems.ts'
 
 const battlesRouter = new Hono()
@@ -30,6 +27,8 @@ type BattleResult = {
   status: 'running' | 'completed' | 'failed'
   phase: BattlePhase
   thought: string
+  /** Code-phase reasoning / prose (not the runnable harness body). */
+  codingThought: string
   code: string
   selfTestCases: { input: string; expectedOutput: string }[]
   selfTestConclusion: string
@@ -85,6 +84,7 @@ function emptyResult(modelId: string): BattleResult {
     status: 'running',
     phase: 'pending',
     thought: '',
+    codingThought: '',
     code: '',
     selfTestCases: [],
     selfTestConclusion: '',
@@ -115,6 +115,7 @@ async function runSide(
     ...emptyResult(modelId),
     phase: 'analyzing',
     thought: '',
+    codingThought: '',
     code: '',
   })
 
@@ -126,33 +127,38 @@ async function runSide(
     let thought = ''
     for await (const d of streamProblemAnalysis(provider, modelId, problem, llmLog)) {
       thought += d
-      merge({ thought, phase: 'analyzing' })
+      merge({ thought: sanitizeModelThoughtMarkdown(thought), phase: 'analyzing' })
     }
+    thought = sanitizeModelThoughtMarkdown(thought)
     analysisTimeMs = Date.now() - tAnalysis0
 
     console.log(`[battle] ${llmLog} analysis done chars=${thought.length} -> code stream`)
 
     merge({ phase: 'coding', thought })
     const tCode0 = Date.now()
-    let code = ''
+    let codeRaw = ''
     for await (const d of streamProblemCode(provider, modelId, problem, thought, llmLog)) {
-      code += d
-      merge({ code, phase: 'coding' })
+      codeRaw += d
+      const { thinking } = splitThinkingFromModelCode(codeRaw)
+      const runnable = prepareRunnableJavaScript(codeRaw)
+      merge({ codingThought: thinking, code: runnable, phase: 'coding' })
     }
     codingTimeMs = Date.now() - tCode0
 
-    code = stripCodeFences(code)
+    const { thinking: finalCodingThought } = splitThinkingFromModelCode(codeRaw)
+    const runnable = prepareRunnableJavaScript(codeRaw)
     const modelOutputMs = analysisTimeMs + codingTimeMs
     merge({
       phase: 'awaiting_execution',
       thought,
-      code,
+      codingThought: finalCodingThought,
+      code: runnable,
       analysisTimeMs,
       codingTimeMs,
       timeMs: modelOutputMs,
     })
     console.log(
-      `[battle] ${llmLog} done awaiting_execution codeChars=${code.length} analysisMs=${analysisTimeMs} codingMs=${codingTimeMs} modelOutputMs=${modelOutputMs}`,
+      `[battle] ${llmLog} done awaiting_execution codeChars=${runnable.length} analysisMs=${analysisTimeMs} codingMs=${codingTimeMs} modelOutputMs=${modelOutputMs}`,
     )
   } catch (err) {
     console.error(`[battle] ${llmLog} FAILED`, err)

@@ -1,21 +1,38 @@
-import type { ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
+import { useStickToBottomScroll } from '@/hooks/useStickToBottomScroll'
 import { CopyVerifySnippetButton } from '@/components/CopyVerifySnippetButton'
 import { JavaScriptCodeBlock } from '@/components/JavaScriptCodeBlock'
 import { SolutionMarkdown } from '@/components/SolutionMarkdown'
 import { buildVerifySnippet } from '@/lib/copyTestHarness'
 import {
   prepareRunnableJavaScript,
+  sanitizeCodingThoughtForDisplay,
   splitThinkingFromModelCode,
   stripCodeFences,
 } from '@/lib/stripCodeFences'
 import { activityLabel, useBattleModelSide } from '@/hooks/useBattleModelSide'
+import { formatDurationSeconds } from '@/lib/formatDuration'
 import type { ModelResult, TestCase, TestResult } from '@/types'
 
-/** Fixed viewport-relative cap + scroll; avoid overscroll-contain so wheel chains to main when not overflowing */
-const PHASE_SCROLL =
-  'min-h-0 max-h-[min(42vh,22rem)] overflow-y-auto overflow-x-hidden'
-const PHASE_SCROLL_OFFICIAL =
-  'min-h-0 max-h-[min(48vh,28rem)] overflow-y-auto overflow-x-hidden'
+function rawCodeStillHasThinkingXml(raw: string): boolean {
+  return (
+    /<redacted_thinking/i.test(raw) ||
+    /<\/redacted_thinking>/i.test(raw) ||
+    /<thinking>/i.test(raw) ||
+    /<\/thinking>/i.test(raw)
+  )
+}
+
+/**
+ * 分析 / 代码 / 官方用例：同一 max-height（原分析高度的 2 倍）+ 单滚动条，双列对齐。
+ */
+const PHASE_CARD_SCROLL =
+  'min-h-0 max-h-[min(84vh,44rem)] overflow-y-auto overflow-x-hidden'
+
+/** 代码块内层：不再加 border（外层卡片已有一圈），仅底色与横向滚动 */
+const CODE_BLOCK_INNER = 'rounded-md bg-muted/20 p-3 overflow-x-auto'
+
+const MAIN_STICK_NEAR_PX = 80
 
 /** 单列内的阶段标题（每侧模型各自一条，不跨列） */
 function PhaseColumnHeading({ children }: { children: ReactNode }) {
@@ -26,11 +43,21 @@ function PhaseColumnHeading({ children }: { children: ReactNode }) {
   )
 }
 
-function LabeledMs({ label, ms, title }: { label: string; ms: number; title?: string }) {
+function LabeledDuration({
+  label,
+  ms,
+  title,
+}: {
+  label: string
+  ms: number
+  title?: string
+}) {
+  const exact = `${ms} ms`
+  const tip = title ? `${title}（${exact}）` : exact
   return (
-    <span className="inline-flex items-baseline gap-0.5 whitespace-nowrap" title={title}>
+    <span className="inline-flex items-baseline gap-0.5 whitespace-nowrap" title={tip}>
       <span className="text-muted-foreground">{label}</span>
-      <span className="tabular-nums font-medium text-foreground">{ms}ms</span>
+      <span className="tabular-nums font-medium text-foreground">{formatDurationSeconds(ms)}</span>
     </span>
   )
 }
@@ -54,17 +81,17 @@ function CompactOfficialTiming({ r, runningOfficial }: { r: ModelResult; running
         <>
           {a != null && c != null && (
             <>
-              <LabeledMs label="分析" ms={a} title="分析阶段耗时" />
+              <LabeledDuration label="分析" ms={a} title="分析阶段耗时" />
               <span className="text-border/70" aria-hidden>
                 ·
               </span>
-              <LabeledMs label="代码" ms={c} title="生成代码阶段耗时" />
+              <LabeledDuration label="代码" ms={c} title="生成代码阶段耗时" />
               <span className="text-border/70" aria-hidden>
                 ·
               </span>
             </>
           )}
-          <LabeledMs label="模型" ms={modelMs} title="模型输出总耗时（分析+生成代码）" />
+          <LabeledDuration label="模型" ms={modelMs} title="模型输出总耗时（分析+生成代码）" />
         </>
       )}
       {hasOfficial && (
@@ -74,7 +101,7 @@ function CompactOfficialTiming({ r, runningOfficial }: { r: ModelResult; running
               ·
             </span>
           )}
-          <LabeledMs label="执行" ms={exec!} title="官方用例在本机执行耗时" />
+          <LabeledDuration label="执行" ms={exec!} title="官方用例在本机执行耗时" />
           {totalEnd != null && (
             <>
               <span className="text-border/70" aria-hidden>
@@ -82,10 +109,12 @@ function CompactOfficialTiming({ r, runningOfficial }: { r: ModelResult; running
               </span>
               <span
                 className="inline-flex items-baseline gap-0.5 whitespace-nowrap"
-                title="总耗时 = 模型输出 + 执行"
+                title={`总耗时 = 模型输出 + 执行（${totalEnd} ms）`}
               >
                 <span className="text-muted-foreground">合计</span>
-                <span className="tabular-nums font-semibold text-foreground">{totalEnd}ms</span>
+                <span className="tabular-nums font-semibold text-foreground">
+                  {formatDurationSeconds(totalEnd)}
+                </span>
               </span>
             </>
           )}
@@ -95,28 +124,29 @@ function CompactOfficialTiming({ r, runningOfficial }: { r: ModelResult; running
   )
 }
 
-type ColProps = {
-  label: string
-  hook: ReturnType<typeof useBattleModelSide>
-}
+type ModelSideHook = ReturnType<typeof useBattleModelSide>
 
-function ModelColumn({ label, hook }: ColProps) {
+type ColumnHeaderProps = { label: string; hook: ModelSideHook }
+
+type ModelColumnProps = ColumnHeaderProps & { battleId: string }
+
+function ModelColumn({ battleId, label, hook }: ModelColumnProps) {
   return (
-    <div className="flex min-h-0 min-w-0 flex-col gap-4">
+    <div className="flex h-full min-h-0 min-w-0 flex-col gap-4">
       <ColumnHeader label={label} hook={hook} />
       <div className="flex min-h-0 flex-col gap-2">
         <PhaseColumnHeading>1 · 分析</PhaseColumnHeading>
-        <AnalysisCell hook={hook} />
+        <AnalysisCell battleId={battleId} hook={hook} />
       </div>
       {hook.showCodePhase && (
         <div className="flex min-h-0 flex-col gap-2">
           <PhaseColumnHeading>2 · 代码</PhaseColumnHeading>
-          <CodeCell hook={hook} />
+          <CodeCell battleId={battleId} hook={hook} />
         </div>
       )}
       {hook.showOfficialPhase && (
         <div className="flex min-h-0 flex-col gap-2">
-          <PhaseColumnHeading>3 · 官方用例</PhaseColumnHeading>
+          <PhaseColumnHeading>3 · 执行测试</PhaseColumnHeading>
           <OfficialCell hook={hook} />
         </div>
       )}
@@ -124,7 +154,7 @@ function ModelColumn({ label, hook }: ColProps) {
   )
 }
 
-function ColumnHeader({ label, hook }: ColProps) {
+function ColumnHeader({ label, hook }: ColumnHeaderProps) {
   const { displayResult, ok, failedLlm } = hook
   return (
     <div className="flex flex-wrap items-center gap-2 min-h-[1.75rem]">
@@ -144,75 +174,107 @@ function ColumnHeader({ label, hook }: ColProps) {
   )
 }
 
-function AnalysisCell({ hook }: { hook: ReturnType<typeof useBattleModelSide> }) {
+function AnalysisCell({ battleId, hook }: { battleId: string; hook: ModelSideHook }) {
   const { displayResult, failedLlm, showAnalysis } = hook
+  const thought = sanitizeCodingThoughtForDisplay(displayResult.thought ?? '')
+  const analysisStreaming = displayResult.phase === 'analyzing'
+  const analysisScroll = useStickToBottomScroll({
+    resetKey: battleId,
+    force: analysisStreaming,
+    syncKey: `${analysisStreaming ? 1 : 0}:${showAnalysis ? 1 : 0}:${thought.length}:${thought}`,
+  })
+
   return (
     <div
-      className={`rounded-md border border-border/40 bg-background/80 p-1 ${PHASE_SCROLL}`}
+      ref={analysisScroll.ref}
+      onScroll={analysisScroll.onScroll}
+      className={`rounded-lg border border-border/80 bg-card/50 ${PHASE_CARD_SCROLL}`}
     >
       {failedLlm && hook.result.error && (
-        <p className="text-sm text-red-600 dark:text-red-400 px-2 pt-1">{hook.result.error}</p>
+        <p className="text-sm text-red-600 dark:text-red-400 px-3 pt-3">{hook.result.error}</p>
       )}
-      {displayResult.phase === 'analyzing' && !String(displayResult.thought ?? '').trim() && (
-        <p className="text-sm text-muted-foreground px-2 py-1">正在生成分析…</p>
+      {displayResult.phase === 'analyzing' && !String(thought).trim() && (
+        <p className="text-sm text-muted-foreground px-3 py-3">正在生成分析…</p>
       )}
-      {showAnalysis && String(displayResult.thought ?? '').trim() && (
-        <div className="rounded-md border border-border/60 bg-muted/20 px-3 py-2">
-          {displayResult.phase === 'analyzing' ? (
-            <pre className="whitespace-pre-wrap break-words font-sans text-sm text-foreground/90">
-              {displayResult.thought}
-            </pre>
-          ) : (
-            <SolutionMarkdown content={displayResult.thought ?? ''} />
-          )}
+      {showAnalysis && String(thought).trim() && (
+        <div className="border-l-[3px] border-l-primary/45 px-3 py-3 sm:pl-4">
+          <SolutionMarkdown content={thought} className="thinking-md" />
         </div>
       )}
     </div>
   )
 }
 
-function CodeCell({ hook }: { hook: ReturnType<typeof useBattleModelSide> }) {
+function CodeCell({
+  battleId,
+  hook,
+}: {
+  battleId: string
+  hook: ModelSideHook
+}) {
   const { displayResult, showCode } = hook
   const raw = displayResult.code ?? ''
-  const { thinking, code: codeWithoutThinking } = splitThinkingFromModelCode(raw)
-  const codeForHighlight = stripCodeFences(codeWithoutThinking)
+  const ct = displayResult.codingThought
+  const useServerSplit =
+    ct !== undefined && ct.trim().length > 0 && !rawCodeStillHasThinkingXml(raw)
+  const split = useServerSplit
+    ? { thinking: ct ?? '', code: raw }
+    : splitThinkingFromModelCode(raw)
+  const thinking = sanitizeCodingThoughtForDisplay(split.thinking)
+  const codeForHighlight = stripCodeFences(split.code)
+
+  const [thinkingOpen, setThinkingOpen] = useState(true)
+  useEffect(() => {
+    setThinkingOpen(true)
+  }, [battleId])
+
+  const codeStreaming = displayResult.phase === 'coding'
+  const codePhaseScroll = useStickToBottomScroll({
+    resetKey: battleId,
+    force: codeStreaming,
+    syncKey: `${thinkingOpen ? 1 : 0}:${thinking.length}:${codeForHighlight.length}:${raw}`,
+  })
 
   return (
     <div
-      className={`rounded-md border border-border/40 bg-background/80 p-1 ${PHASE_SCROLL}`}
+      ref={codePhaseScroll.ref}
+      onScroll={codePhaseScroll.onScroll}
+      className={`rounded-lg border border-border/80 bg-card/50 ${PHASE_CARD_SCROLL}`}
     >
       {displayResult.phase === 'coding' && !raw && (
-        <p className="text-sm text-muted-foreground px-2 py-1">正在生成代码…</p>
+        <p className="text-sm text-muted-foreground px-3 py-3">正在生成代码…</p>
       )}
       {showCode && raw && (
-        <div className="space-y-3 px-1">
+        <div className="space-y-4 p-3">
           {thinking ? (
-            <details className="rounded-md border border-amber-500/25 bg-amber-500/[0.06] dark:border-amber-500/20 dark:bg-amber-500/[0.08]">
-              <summary className="cursor-pointer select-none px-3 py-2 text-xs font-medium text-muted-foreground hover:text-foreground">
-                代码生成 · 思考过程（可折叠，与下方「代码」区分）
+            <details
+              className="group overflow-hidden"
+              open={thinkingOpen}
+              onToggle={(e) => setThinkingOpen(e.currentTarget.open)}
+            >
+              <summary className="cursor-pointer select-none list-none rounded-md px-2 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted/20 [&::-webkit-details-marker]:hidden">
+                <span className="text-muted-foreground font-normal">可折叠 · </span>
+                思考
               </summary>
-              <pre className="max-h-[min(30vh,14rem)] min-h-0 overflow-y-auto whitespace-pre-wrap break-words border-t border-border/50 px-3 py-2 font-sans text-[11px] leading-relaxed text-foreground/85">
-                {thinking}
-              </pre>
+              <div className="mt-2 border-l-[3px] border-l-primary/45 py-1 pl-3 sm:pl-4">
+                <SolutionMarkdown content={thinking} className="thinking-md" />
+              </div>
             </details>
           ) : null}
           {codeForHighlight ? (
-            <div>
-              <p className="mb-1.5 px-0.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                代码
-              </p>
+            <div className={CODE_BLOCK_INNER}>
               <JavaScriptCodeBlock
                 code={codeForHighlight}
                 className="m-0 overflow-x-auto whitespace-pre-wrap break-words font-mono text-sm leading-relaxed text-foreground"
               />
             </div>
           ) : thinking ? (
-            <p className="px-2 text-xs text-muted-foreground">暂无独立代码块（仅含思考过程时可展开上方查看）</p>
+            <p className="text-sm text-muted-foreground">暂无独立代码块（仅含思考过程时可展开上方查看）</p>
           ) : null}
         </div>
       )}
       {displayResult.selfTestConclusion && !displayResult.officialResult && (
-        <p className="mt-2 px-2 text-xs text-muted-foreground">{displayResult.selfTestConclusion}</p>
+        <p className="mt-1 px-3 pb-3 text-xs text-muted-foreground">{displayResult.selfTestConclusion}</p>
       )}
     </div>
   )
@@ -242,7 +304,7 @@ function OfficialCell({ hook }: { hook: ReturnType<typeof useBattleModelSide> })
 
   return (
     <div
-      className={`rounded-md border border-border/40 bg-background/80 p-1 space-y-2 ${PHASE_SCROLL_OFFICIAL}`}
+      className={`rounded-lg border border-border/80 bg-card/50 p-3 space-y-2 ${PHASE_CARD_SCROLL}`}
     >
       {modelTimingVisible && !showOfficialSection && (
         <div className="flex flex-wrap items-center gap-x-2 px-2 pt-1">
@@ -336,9 +398,9 @@ function OfficialCell({ hook }: { hook: ReturnType<typeof useBattleModelSide> })
               </p>
             )}
           {displayResult.officialResult?.details && displayResult.officialResult.details.length > 0 && (
-            <div className="overflow-x-auto rounded-md border border-border">
+            <div className="overflow-x-auto rounded-md bg-muted/15">
               <table className="w-full min-w-[20rem] text-left text-xs">
-                <thead className="border-b border-border bg-muted/50 font-medium text-muted-foreground">
+                <thead className="border-b border-border/70 bg-muted/40 font-medium text-muted-foreground">
                   <tr>
                     <th className="px-2 py-1.5 w-10">#</th>
                     <th className="px-2 py-1.5">输入</th>
@@ -393,6 +455,57 @@ type BattleCompareProps = {
   testCases: TestCase[]
   testsReady: boolean
   submitOfficialToServer?: boolean
+  /** 服务端仍在流式写模型输出时，主列 <main> 跟随滚到底 */
+  streamBattle?: boolean
+}
+
+/** 对战内容变高时滚动外层 <main>；流式 / 跑官方用例时强制粘底 */
+function BattleMainAutoScroll({
+  battleId,
+  force,
+  thoughtA,
+  codeA,
+  thoughtB,
+  codeB,
+  runDoneA,
+  runDoneB,
+}: {
+  battleId: string
+  force: boolean
+  thoughtA?: string
+  codeA?: string
+  thoughtB?: string
+  codeB?: string
+  runDoneA?: number
+  runDoneB?: number
+}) {
+  const stickRef = useRef(true)
+  useLayoutEffect(() => {
+    stickRef.current = true
+  }, [battleId])
+
+  useLayoutEffect(() => {
+    const main = document.querySelector('main')
+    if (!main) return
+    if (force || stickRef.current) {
+      main.scrollTop = main.scrollHeight
+    }
+  }, [force, battleId, thoughtA, codeA, thoughtB, codeB, runDoneA, runDoneB])
+
+  useEffect(() => {
+    const main = document.querySelector('main')
+    if (!main) return
+    const onScroll = () => {
+      if (force) return
+      const d = main.scrollHeight - main.scrollTop - main.clientHeight
+      stickRef.current = d <= MAIN_STICK_NEAR_PX
+    }
+    main.addEventListener('scroll', onScroll, { passive: true })
+    onScroll()
+    return () => main.removeEventListener('scroll', onScroll)
+  }, [force])
+
+  return null
 }
 
 export function BattleCompare({
@@ -404,6 +517,7 @@ export function BattleCompare({
   testCases,
   testsReady,
   submitOfficialToServer = true,
+  streamBattle = false,
 }: BattleCompareProps) {
   const hookA = useBattleModelSide({
     battleId,
@@ -422,10 +536,25 @@ export function BattleCompare({
     submitOfficialToServer,
   })
 
+  const mainScrollForce =
+    streamBattle || hookA.runningOfficial || hookB.runningOfficial
+
   return (
-    <div className="grid min-h-0 grid-cols-1 gap-y-8 sm:grid-cols-2 sm:gap-x-8 sm:gap-y-0 items-start">
-      <ModelColumn label={modelAName} hook={hookA} />
-      <ModelColumn label={modelBName} hook={hookB} />
-    </div>
+    <>
+      <BattleMainAutoScroll
+        battleId={battleId}
+        force={mainScrollForce}
+        thoughtA={resultA.thought}
+        codeA={resultA.code}
+        thoughtB={resultB.thought}
+        codeB={resultB.code}
+        runDoneA={hookA.runProgress?.done}
+        runDoneB={hookB.runProgress?.done}
+      />
+      <div className="grid min-h-0 grid-cols-1 gap-y-8 sm:grid-cols-2 sm:gap-x-8 sm:gap-y-0 sm:items-stretch">
+        <ModelColumn battleId={battleId} label={modelAName} hook={hookA} />
+        <ModelColumn battleId={battleId} label={modelBName} hook={hookB} />
+      </div>
+    </>
   )
 }
