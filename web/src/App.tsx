@@ -75,8 +75,11 @@ function App() {
         </nav>
       </aside>
 
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-        <header className="z-10 shrink-0 border-b border-border/80 bg-arena-header-blur/85 backdrop-blur-md supports-[backdrop-filter]:bg-background/75">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden">
+        <header
+          id="app-shell-header"
+          className="relative z-10 shrink-0 overflow-visible border-b border-border/80 bg-arena-header-blur/85 backdrop-blur-md supports-[backdrop-filter]:bg-background/75"
+        >
           <div className="mx-auto w-full max-w-7xl px-6 py-4 sm:px-8 lg:px-10">
             {view === 'battle' ? (
               <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between lg:gap-6">
@@ -93,6 +96,10 @@ function App() {
               </h1>
             )}
           </div>
+          <div
+            id="battle-problem-popover-slot"
+            className="pointer-events-none absolute left-0 right-0 top-full z-[60] w-full"
+          />
         </header>
 
         <main className="min-h-0 flex-1 overflow-y-auto">

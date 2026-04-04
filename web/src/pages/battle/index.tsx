@@ -1,6 +1,6 @@
 import { useState, useEffect, useLayoutEffect, useMemo } from 'react'
 import { createPortal } from 'react-dom'
-import { ChevronDown } from 'lucide-react'
+import { ChevronDown, X } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useProblem, useStartBattle, useBattle } from '@/hooks/useApi'
 import type { PlatformModel, Problem, TestCase } from '@/types'
@@ -16,6 +16,8 @@ import {
 } from '@/components/ui/select'
 
 const HEADER_SLOT_ID = 'battle-header-slot'
+const APP_SHELL_HEADER_ID = 'app-shell-header'
+const PROBLEM_POPOVER_SLOT_ID = 'battle-problem-popover-slot'
 
 export function Battle({ models, problems }: { models: PlatformModel[]; problems: Problem[] }) {
   const queryClient = useQueryClient()
@@ -45,9 +47,36 @@ export function Battle({ models, problems }: { models: PlatformModel[]; problems
   const problemDetailTestCases: TestCase[] = problemDetail?.testCases ?? []
 
   const [headerSlotEl, setHeaderSlotEl] = useState<HTMLElement | null>(null)
+  const [problemPopoverSlotEl, setProblemPopoverSlotEl] = useState<HTMLElement | null>(null)
+  const [problemPopoverMaxHeightPx, setProblemPopoverMaxHeightPx] = useState<number | null>(null)
+
   useLayoutEffect(() => {
     setHeaderSlotEl(document.getElementById(HEADER_SLOT_ID))
+    setProblemPopoverSlotEl(document.getElementById(PROBLEM_POPOVER_SLOT_ID))
   }, [])
+
+  useLayoutEffect(() => {
+    if (!problemDetailOpen) {
+      setProblemPopoverMaxHeightPx(null)
+      return
+    }
+    const measure = () => {
+      const el = document.getElementById(APP_SHELL_HEADER_ID)
+      if (el) {
+        const bottom = el.getBoundingClientRect().bottom
+        setProblemPopoverMaxHeightPx(Math.max(160, window.innerHeight - bottom - 16))
+      }
+    }
+    measure()
+    const headerEl = document.getElementById(APP_SHELL_HEADER_ID)
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(measure) : null
+    if (headerEl && ro) ro.observe(headerEl)
+    window.addEventListener('resize', measure)
+    return () => {
+      ro?.disconnect()
+      window.removeEventListener('resize', measure)
+    }
+  }, [problemDetailOpen])
 
   useEffect(() => {
     if (problems.length > 0 && !selectedProblem) {
@@ -65,6 +94,15 @@ export function Battle({ models, problems }: { models: PlatformModel[]; problems
       if (!modelB) setModelB(models[1]?.id || models[0].id)
     }
   }, [models, modelA, modelB])
+
+  useEffect(() => {
+    if (!problemDetailOpen) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setProblemDetailOpen(false)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [problemDetailOpen])
 
   const canStart = selectedProblem && modelA && modelB
   const modelAName = models.find((m) => m.id === modelA)?.name || 'Model A'
@@ -165,87 +203,6 @@ export function Battle({ models, problems }: { models: PlatformModel[]; problems
     <div className="space-y-6">
       {headerSlotEl ? createPortal(headerControls, headerSlotEl) : null}
 
-      {problemDetailOpen && selectedProblemRow && (
-        <section
-          className="rounded-lg border border-border bg-card p-4 text-sm shadow-sm"
-          aria-label="题目与测试用例"
-        >
-          <div>
-            <div className="mb-1 flex flex-wrap items-center gap-2">
-              <span className="font-semibold text-foreground">{selectedProblemRow.title}</span>
-              {selectedProblemRow.difficulty && (
-                <span className="rounded-md bg-secondary px-1.5 py-0.5 text-[11px] font-medium uppercase tracking-wide text-secondary-foreground">
-                  {selectedProblemRow.difficulty}
-                </span>
-              )}
-              {selectedProblemRow.tags?.map((tag) => (
-                <span
-                  key={tag}
-                  className="rounded-md border border-border bg-background px-1.5 py-0.5 text-[11px] text-muted-foreground"
-                >
-                  {tag}
-                </span>
-              ))}
-            </div>
-            <p className="whitespace-pre-wrap leading-relaxed text-muted-foreground">
-              {selectedProblemRow.description}
-            </p>
-          </div>
-
-          <div className="mt-6">
-            <p className="mb-1 text-xs font-medium text-muted-foreground">入口与签名</p>
-            <p className="text-xs text-muted-foreground">
-              函数名：
-              <code className="rounded bg-muted px-1 py-0.5 font-mono">
-                {selectedProblemRow.entryPoint}
-              </code>
-            </p>
-            <CodeBlock
-              code={selectedProblemRow.functionSignature}
-              className="m-0 mt-2 overflow-x-auto rounded-md border border-border bg-muted/50 p-3 font-mono text-xs leading-relaxed text-foreground whitespace-pre"
-            />
-          </div>
-
-          <div className="mt-6">
-            <p className="mb-2 text-xs font-medium text-muted-foreground">
-              测试用例
-              {problemDetailLoading && '（加载中…）'}
-              {problemDetailError && !problemDetail && (
-                <span className="ml-1 font-normal text-amber-600 dark:text-amber-400">
-                  （接口不可用，已使用本地示例数据）
-                </span>
-              )}
-            </p>
-            {problemDetailLoading && problemDetailTestCases.length === 0 ? (
-              <p className="text-muted-foreground">正在加载测试用例…</p>
-            ) : problemDetailTestCases.length === 0 ? (
-              <p className="text-muted-foreground">暂无测试用例</p>
-            ) : (
-              <div className="overflow-x-auto rounded-md border border-border">
-                <table className="w-full min-w-[18rem] text-left text-xs">
-                  <thead className="border-b border-border bg-muted/50 font-medium text-muted-foreground">
-                    <tr>
-                      <th className="w-10 px-3 py-2">#</th>
-                      <th className="px-3 py-2">输入（main 参数）</th>
-                      <th className="px-3 py-2">期望输出</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border">
-                    {problemDetailTestCases.map((tc, idx) => (
-                      <tr key={tc.id} className="bg-background/50">
-                        <td className="px-3 py-2 font-mono text-muted-foreground">{idx + 1}</td>
-                        <td className="px-3 py-2 font-mono text-foreground">{tc.input}</td>
-                        <td className="px-3 py-2 font-mono text-foreground">{tc.expectedOutput}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        </section>
-      )}
-
       <Result
         battle={battle}
         battleId={battleId}
@@ -258,6 +215,123 @@ export function Battle({ models, problems }: { models: PlatformModel[]; problems
         runTestCases={runTestCases}
         battleTestsReady={battleTestsReady}
       />
+
+      {problemDetailOpen &&
+        selectedProblemRow &&
+        problemPopoverSlotEl &&
+        createPortal(
+          <div className="pointer-events-auto absolute inset-x-0 top-0">
+            <div className="mx-auto w-full max-w-7xl px-6 sm:px-8 lg:px-10">
+              <div
+                role="dialog"
+                aria-modal="false"
+                aria-labelledby="battle-problem-popover-title"
+                className="overflow-y-auto rounded-b-lg border border-t-0 border-border bg-card p-4 text-sm shadow-md supports-[backdrop-filter]:bg-card"
+                style={{
+                  maxHeight:
+                    problemPopoverMaxHeightPx != null
+                      ? `${problemPopoverMaxHeightPx}px`
+                      : 'min(85vh, 70dvh)',
+                }}
+              >
+                <div className="mb-3 flex items-start justify-between gap-3">
+                  <h2
+                    id="battle-problem-popover-title"
+                    className="text-sm font-semibold leading-tight text-foreground"
+                  >
+                    题目与测试用例
+                  </h2>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 shrink-0"
+                    onClick={() => setProblemDetailOpen(false)}
+                    aria-label="关闭"
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+                <div>
+                  <div>
+                    <div className="mb-1 flex flex-wrap items-center gap-2">
+                      <span className="font-semibold text-foreground">{selectedProblemRow.title}</span>
+                      {selectedProblemRow.difficulty && (
+                        <span className="rounded-md bg-secondary px-1.5 py-0.5 text-[11px] font-medium uppercase tracking-wide text-secondary-foreground">
+                          {selectedProblemRow.difficulty}
+                        </span>
+                      )}
+                      {selectedProblemRow.tags?.map((tag) => (
+                        <span
+                          key={tag}
+                          className="rounded-md border border-border bg-background px-1.5 py-0.5 text-[11px] text-muted-foreground"
+                        >
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
+                    <p className="whitespace-pre-wrap leading-relaxed text-muted-foreground">
+                      {selectedProblemRow.description}
+                    </p>
+                  </div>
+
+                  <div className="mt-6">
+                    <p className="mb-1 text-xs font-medium text-muted-foreground">入口与签名</p>
+                    <p className="text-xs text-muted-foreground">
+                      函数名：
+                      <code className="rounded bg-muted px-1 py-0.5 font-mono">
+                        {selectedProblemRow.entryPoint}
+                      </code>
+                    </p>
+                    <CodeBlock
+                      code={selectedProblemRow.functionSignature}
+                      className="m-0 mt-2 overflow-x-auto rounded-md border border-border bg-muted/50 p-3 font-mono text-xs leading-relaxed text-foreground whitespace-pre"
+                    />
+                  </div>
+
+                  <div className="mt-6">
+                    <p className="mb-2 text-xs font-medium text-muted-foreground">
+                      测试用例
+                      {problemDetailLoading && '（加载中…）'}
+                      {problemDetailError && !problemDetail && (
+                        <span className="ml-1 font-normal text-amber-600 dark:text-amber-400">
+                          （接口不可用，已使用本地示例数据）
+                        </span>
+                      )}
+                    </p>
+                    {problemDetailLoading && problemDetailTestCases.length === 0 ? (
+                      <p className="text-muted-foreground">正在加载测试用例…</p>
+                    ) : problemDetailTestCases.length === 0 ? (
+                      <p className="text-muted-foreground">暂无测试用例</p>
+                    ) : (
+                      <div className="overflow-x-auto rounded-md border border-border">
+                        <table className="w-full min-w-[18rem] text-left text-xs">
+                          <thead className="border-b border-border bg-muted/50 font-medium text-muted-foreground">
+                            <tr>
+                              <th className="w-10 px-3 py-2">#</th>
+                              <th className="px-3 py-2">输入（main 参数）</th>
+                              <th className="px-3 py-2">期望输出</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-border">
+                            {problemDetailTestCases.map((tc, idx) => (
+                              <tr key={tc.id} className="bg-background/50">
+                                <td className="px-3 py-2 font-mono text-muted-foreground">{idx + 1}</td>
+                                <td className="px-3 py-2 font-mono text-foreground">{tc.input}</td>
+                                <td className="px-3 py-2 font-mono text-foreground">{tc.expectedOutput}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>,
+          problemPopoverSlotEl,
+        )}
     </div>
   )
 }
