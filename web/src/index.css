@@ -188,22 +188,22 @@
   color: hsl(172 52% 60%);
 }
 
-/* Markdown solution panel: fenced code (highlight.js puts .hljs on <code>) */
-.solution-md pre {
+/* Markdown viewer: fenced code (highlight.js puts .hljs on <code>) */
+.markdown-viewer pre {
   @apply rounded-md border border-border overflow-x-auto p-0 my-3;
   background: hsl(var(--arena-code-bg));
 }
-.solution-md pre code.hljs {
+.markdown-viewer pre code.hljs {
   @apply block p-3 text-sm font-mono leading-relaxed bg-transparent text-inherit;
 }
-.solution-md :not(pre) > code {
+.markdown-viewer :not(pre) > code {
   @apply rounded-md border border-border/50 bg-muted/50 px-1.5 py-px text-[0.8125rem] font-mono font-normal text-foreground;
 }
 
 /* 分析阶段 Markdown：正文略淡、标题仍清晰 */
-.solution-md.thinking-md :where(h2, h3):first-child {
+.markdown-viewer.thinking-md :where(h2, h3):first-child {
   margin-top: 0;
 }
-.solution-md.thinking-md :where(h2, h3) {
+.markdown-viewer.thinking-md :where(h2, h3) {
   @apply text-foreground;
 }
