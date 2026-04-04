@@ -52,8 +52,8 @@ export function Compare({
     submitOfficialToServer,
   })
 
-  const mainScrollForce =
-    streamBattle || hookA.runningOfficial || hookB.runningOfficial
+  /** 仅流式对战粘底；本地重跑官方用例不 force，避免刷新后因 running_tests 整页滚到底 */
+  const mainScrollForce = streamBattle
 
   return (
     <>
