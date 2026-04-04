@@ -64,8 +64,8 @@ export default {
         },
       },
       boxShadow: {
-        arena: "0 1px 0 0 hsl(var(--border) / 0.6), 0 12px 40px -24px hsl(var(--arena-card-shadow) / 0.45)",
-        "arena-card": "0 0 0 1px hsl(var(--border) / 0.5), 0 16px 48px -28px hsl(0 0% 0% / 0.35)",
+        arena: "0 1px 0 0 hsl(var(--border) / 0.5)",
+        "arena-card": "0 0 0 1px hsl(var(--border) / 0.45)",
       },
     },
   },

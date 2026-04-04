@@ -133,7 +133,7 @@ function App() {
     <div className="flex h-full min-h-0 overflow-hidden bg-background">
       <aside className="flex w-64 shrink-0 flex-col overflow-y-auto border-r border-arena-sidebar-border bg-arena-sidebar p-4">
         <div className="flex items-center gap-2.5 mb-8 px-2">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center shadow-sm ring-1 ring-white/10">
+          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center ring-1 ring-white/10">
             <span className="text-white font-bold text-sm tracking-tight">CS</span>
           </div>
           <div className="flex flex-col gap-0.5 min-w-0">
@@ -155,7 +155,7 @@ function App() {
           >
             <span
               className={`w-2 h-2 rounded-full shrink-0 ${
-                view === 'battle' ? 'bg-arena-accent shadow-[0_0_8px_hsl(var(--arena-accent)/0.55)]' : 'bg-muted-foreground/40'
+                view === 'battle' ? 'bg-arena-accent shadow-[0_0_6px_hsl(var(--arena-accent)/0.35)]' : 'bg-muted-foreground/40'
               }`}
             />
             Battle
