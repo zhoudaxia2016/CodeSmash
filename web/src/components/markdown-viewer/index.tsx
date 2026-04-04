@@ -9,13 +9,13 @@ type Props = {
   className?: string
 }
 
-export function SolutionMarkdown({ content, className }: Props) {
+export function MarkdownViewer({ content, className }: Props) {
   if (!content.trim()) return null
 
   return (
     <div
       className={[
-        'solution-md prose prose-sm max-w-none text-foreground',
+        'markdown-viewer prose prose-sm max-w-none text-foreground',
         'dark:prose-invert',
         'prose-headings:font-semibold prose-headings:tracking-tight prose-headings:text-foreground',
         'prose-p:leading-relaxed prose-p:text-muted-foreground prose-li:text-muted-foreground',

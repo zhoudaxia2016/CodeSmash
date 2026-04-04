@@ -6,7 +6,7 @@ type Props = {
   className?: string
 }
 
-export function JavaScriptCodeBlock({ code, className }: Props) {
+export function CodeBlock({ code, className }: Props) {
   const [html, setHtml] = useState<string | null>(null)
   const [plainFallback, setPlainFallback] = useState(false)
 
