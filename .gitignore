@@ -57,5 +57,10 @@ coverage/
 web/dist/
 server/dist/
 
+# Local libSQL file (LLM call logs)
+server/data/*.db
+server/data/*.db-shm
+server/data/*.db-wal
+
 # TypeScript build info
 *.tsbuildinfo

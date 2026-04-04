@@ -125,7 +125,11 @@ async function runSide(
   try {
     const tAnalysis0 = Date.now()
     let thought = ''
-    for await (const d of streamProblemAnalysis(provider, modelId, problem, llmLog)) {
+    for await (const d of streamProblemAnalysis(provider, modelId, problem, {
+      logLabel: llmLog,
+      source: 'battle_analysis',
+      sourceId: battleId,
+    })) {
       thought += d
       merge({ thought: sanitizeModelThoughtMarkdown(thought), phase: 'analyzing' })
     }
@@ -137,7 +141,11 @@ async function runSide(
     merge({ phase: 'coding', thought })
     const tCode0 = Date.now()
     let codeRaw = ''
-    for await (const d of streamProblemCode(provider, modelId, problem, thought, llmLog)) {
+    for await (const d of streamProblemCode(provider, modelId, problem, thought, {
+      logLabel: llmLog,
+      source: 'battle_code',
+      sourceId: battleId,
+    })) {
       codeRaw += d
       const { thinking } = splitThinkingFromModelCode(codeRaw)
       const runnable = prepareRunnableJavaScript(codeRaw)

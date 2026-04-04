@@ -1,5 +1,25 @@
+import { getLibsqlClient } from '../db/client.ts'
+import {
+  isLlmDbLogEnabled,
+  maxMessagesCharsForDb,
+  maxOutputCharsForDb,
+  scheduleInsertLlmCallLog,
+  serializeMessagesForDb,
+  truncateOutputForDb,
+  type LlmCallSource,
+} from '../db/llmCallLog.ts'
 import { tryExtractStructuredCodeString } from './modelStructuredParse.ts'
 import { splitThinkingFromModelCode } from './codePhaseSplit.ts'
+
+export type { LlmCallSource }
+
+export type StreamLlmOptions = {
+  logLabel?: string
+  source: LlmCallSource
+  sourceId?: string | null
+}
+
+let warnedLlmDbMissingUrl = false
 
 export interface LLMRequest {
   model: string
@@ -75,117 +95,172 @@ async function* streamChat(
   provider: 'minimax' | 'deepseek',
   platformModelId: string,
   messages: ChatMessage[],
-  /** 例如 `[battle=uuid side=A] analysis`，便于对照服务端日志 */
-  logLabel = '',
+  options: StreamLlmOptions,
 ): AsyncGenerator<string, void, unknown> {
+  const logLabel = options.logLabel ?? ''
   const tag = logLabel ? ` ${logLabel}` : ''
   const config = PROVIDERS[provider]
-  if (!config.apiKey) {
-    console.error(`[llm]${tag} abort: ${provider} API key not configured`)
-    throw new Error(`${provider} API key not configured`)
-  }
-
-  const apiModel = resolveApiModel(provider, platformModelId)
+  const createdAt = new Date().toISOString()
   const t0 = Date.now()
-  console.log(
-    `[llm]${tag} request provider=${provider} upstreamModel=${apiModel} platformModelId=${platformModelId} url=${config.baseUrl}/chat/completions`,
-  )
-  logChatPrompts(tag, messages)
 
-  const response = await fetch(`${config.baseUrl}/chat/completions`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${config.apiKey}`,
-    },
-    body: JSON.stringify({
+  let shouldPersist = false
+  let apiModel = ''
+  let streamSucceeded = false
+  let outputAccum = ''
+  let persistError: string | null = null
+
+  const persistRow = () => {
+    if (!shouldPersist || !isLlmDbLogEnabled()) return
+    const cli = getLibsqlClient()
+    if (!cli) {
+      if (!warnedLlmDbMissingUrl) {
+        warnedLlmDbMissingUrl = true
+        console.warn('[llm-db] LLM_DB_LOG is enabled but LIBSQL_URL is unset; skipping DB writes')
+      }
+      return
+    }
+    const completedAt = new Date().toISOString()
+    const messagesJson = serializeMessagesForDb(messages, maxMessagesCharsForDb())
+    const output_text = streamSucceeded
+      ? truncateOutputForDb(outputAccum, maxOutputCharsForDb())
+      : null
+    scheduleInsertLlmCallLog(cli, {
+      id: crypto.randomUUID(),
+      created_at: createdAt,
+      completed_at: completedAt,
+      source: options.source,
+      source_id: options.sourceId ?? null,
+      provider,
       model: apiModel,
-      messages,
-      max_tokens: 4096,
-      stream: true,
-    }),
-  })
-
-  if (!response.ok) {
-    const error = await response.text()
-    console.error(`[llm]${tag} HTTP ${response.status} body=${error.slice(0, 800)}`)
-    throw new Error(`${provider} API error: ${response.status} - ${error}`)
+      messages: messagesJson,
+      output_text,
+      error: streamSucceeded ? null : persistError,
+      duration_ms: Date.now() - t0,
+    })
   }
 
-  console.log(`[llm]${tag} response OK, reading SSE stream… (+${Date.now() - t0}ms)`)
+  try {
+    if (!config.apiKey) {
+      console.error(`[llm]${tag} abort: ${provider} API key not configured`)
+      throw new Error(`${provider} API key not configured`)
+    }
 
-  const reader = response.body!.getReader()
-  const decoder = new TextDecoder()
-  let carry = ''
-  let deltaChunks = 0
-  let deltaChars = 0
-  /** MiniMax (and similar) stream reasoning in delta.reasoning_content / reasoning_details, not in content. */
-  let pendingReasoning = ''
+    apiModel = resolveApiModel(provider, platformModelId)
+    shouldPersist = true
 
-  while (true) {
-    const { done, value } = await reader.read()
-    if (done) break
-    carry += decoder.decode(value, { stream: true })
-    const lines = carry.split('\n')
-    carry = lines.pop() ?? ''
-    for (const line of lines) {
-      const trimmed = line.trim()
-      if (!trimmed.startsWith('data:')) continue
-      const data = trimmed.slice(5).trim()
-      if (data === '[DONE]') continue
-      try {
-        const json = JSON.parse(data) as {
-          choices?: Array<{ delta?: Record<string, unknown> }>
-        }
-        const d = json.choices?.[0]?.delta
-        if (!d || typeof d !== 'object') continue
+    console.log(
+      `[llm]${tag} request provider=${provider} upstreamModel=${apiModel} platformModelId=${platformModelId} url=${config.baseUrl}/chat/completions`,
+    )
+    logChatPrompts(tag, messages)
 
-        let rp = ''
-        const rc = d.reasoning_content
-        if (typeof rc === 'string' && rc.length > 0) rp += rc
-        const rd = d.reasoning_details
-        if (Array.isArray(rd)) {
-          for (const item of rd) {
-            if (item && typeof item === 'object' && 'text' in item) {
-              const t = (item as { text?: unknown }).text
-              if (typeof t === 'string' && t.length > 0) rp += t
+    const response = await fetch(`${config.baseUrl}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${config.apiKey}`,
+      },
+      body: JSON.stringify({
+        model: apiModel,
+        messages,
+        max_tokens: 4096,
+        stream: true,
+      }),
+    })
+
+    if (!response.ok) {
+      const error = await response.text()
+      console.error(`[llm]${tag} HTTP ${response.status} body=${error.slice(0, 800)}`)
+      persistError = `${provider} API error: ${response.status} - ${error.slice(0, 2000)}`
+      throw new Error(`${provider} API error: ${response.status} - ${error}`)
+    }
+
+    console.log(`[llm]${tag} response OK, reading SSE stream… (+${Date.now() - t0}ms)`)
+
+    const reader = response.body!.getReader()
+    const decoder = new TextDecoder()
+    let carry = ''
+    let deltaChunks = 0
+    let deltaChars = 0
+    /** MiniMax (and similar) stream reasoning in delta.reasoning_content / reasoning_details, not in content. */
+    let pendingReasoning = ''
+
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      carry += decoder.decode(value, { stream: true })
+      const lines = carry.split('\n')
+      carry = lines.pop() ?? ''
+      for (const line of lines) {
+        const trimmed = line.trim()
+        if (!trimmed.startsWith('data:')) continue
+        const data = trimmed.slice(5).trim()
+        if (data === '[DONE]') continue
+        try {
+          const json = JSON.parse(data) as {
+            choices?: Array<{ delta?: Record<string, unknown> }>
+          }
+          const d = json.choices?.[0]?.delta
+          if (!d || typeof d !== 'object') continue
+
+          let rp = ''
+          const rc = d.reasoning_content
+          if (typeof rc === 'string' && rc.length > 0) rp += rc
+          const rd = d.reasoning_details
+          if (Array.isArray(rd)) {
+            for (const item of rd) {
+              if (item && typeof item === 'object' && 'text' in item) {
+                const t = (item as { text?: unknown }).text
+                if (typeof t === 'string' && t.length > 0) rp += t
+              }
             }
           }
-        }
-        const th = d.thinking
-        if (typeof th === 'string' && th.length > 0) rp += th
+          const th = d.thinking
+          if (typeof th === 'string' && th.length > 0) rp += th
 
-        if (rp) pendingReasoning += rp
+          if (rp) pendingReasoning += rp
 
-        const content = d.content
-        if (typeof content === 'string' && content.length > 0) {
-          if (pendingReasoning.trim()) {
-            const wrapped = `<redacted_thinking>${pendingReasoning.trim()}</redacted_thinking>\n`
+          const content = d.content
+          if (typeof content === 'string' && content.length > 0) {
+            if (pendingReasoning.trim()) {
+              const wrapped = `<redacted_thinking>${pendingReasoning.trim()}</redacted_thinking>\n`
+              deltaChunks++
+              deltaChars += wrapped.length
+              outputAccum += wrapped
+              yield wrapped
+              pendingReasoning = ''
+            }
             deltaChunks++
-            deltaChars += wrapped.length
-            yield wrapped
-            pendingReasoning = ''
+            deltaChars += content.length
+            outputAccum += content
+            yield content
           }
-          deltaChunks++
-          deltaChars += content.length
-          yield content
+        } catch {
+          // ignore partial JSON lines
         }
-      } catch {
-        // ignore partial JSON lines
       }
     }
-  }
 
-  if (pendingReasoning.trim()) {
-    const wrapped = `<redacted_thinking>${pendingReasoning.trim()}</redacted_thinking>`
-    deltaChunks++
-    deltaChars += wrapped.length
-    yield wrapped
-  }
+    if (pendingReasoning.trim()) {
+      const wrapped = `<redacted_thinking>${pendingReasoning.trim()}</redacted_thinking>`
+      deltaChunks++
+      deltaChars += wrapped.length
+      outputAccum += wrapped
+      yield wrapped
+    }
 
-  console.log(
-    `[llm]${tag} stream done deltaChunks=${deltaChunks} deltaChars=${deltaChars} totalMs=${Date.now() - t0}`,
-  )
+    streamSucceeded = true
+
+    console.log(
+      `[llm]${tag} stream done deltaChunks=${deltaChunks} deltaChars=${deltaChars} totalMs=${Date.now() - t0}`,
+    )
+  } catch (e) {
+    if (persistError === null) {
+      persistError = e instanceof Error ? e.message : String(e)
+    }
+    throw e
+  } finally {
+    persistRow()
+  }
 }
 
 const ANALYSIS_SYSTEM = `You are an expert at algorithm design. For the given programming problem, explain your reasoning ONLY:
@@ -220,7 +295,7 @@ export async function* streamProblemAnalysis(
   provider: 'minimax' | 'deepseek',
   platformModelId: string,
   problem: ProblemPayload,
-  logLabel?: string,
+  options: StreamLlmOptions,
 ): AsyncGenerator<string, void, unknown> {
   const user = `Title: ${problem.title}
 
@@ -232,11 +307,13 @@ ${problem.functionSignature}
 
 Analyze how you would solve this. Remember: no code.`
 
-  const tag = logLabel ? `${logLabel} analysis` : 'analysis'
+  const logLabel = options.logLabel
+    ? `${options.logLabel} analysis`
+    : 'analysis'
   yield* streamChat(provider, platformModelId, [
     { role: 'system', content: ANALYSIS_SYSTEM },
     { role: 'user', content: user },
-  ], tag)
+  ], { ...options, logLabel })
 }
 
 export async function* streamProblemCode(
@@ -244,7 +321,7 @@ export async function* streamProblemCode(
   platformModelId: string,
   problem: ProblemPayload,
   analysis: string,
-  logLabel?: string,
+  options: StreamLlmOptions,
 ): AsyncGenerator<string, void, unknown> {
   const user = `Title: ${problem.title}
 
@@ -259,11 +336,11 @@ ${analysis}
 
 Write the JavaScript implementation: a single ${problem.entryPoint} matching the signature, nothing duplicated.`
 
-  const tag = logLabel ? `${logLabel} code` : 'code'
+  const logLabel = options.logLabel ? `${options.logLabel} code` : 'code'
   yield* streamChat(provider, platformModelId, [
     { role: 'system', content: buildCodeSystem(problem.entryPoint, problem.functionSignature) },
     { role: 'user', content: user },
-  ], tag)
+  ], { ...options, logLabel })
 }
 
 /**
@@ -320,12 +397,12 @@ export async function callLLM(provider: 'minimax' | 'deepseek', request: LLMRequ
   }
 
   let thought = ''
-  for await (const d of streamProblemAnalysis(provider, request.model, request.problem)) {
+  for await (const d of streamProblemAnalysis(provider, request.model, request.problem, { source: 'other' })) {
     thought += d
   }
 
   let code = ''
-  for await (const d of streamProblemCode(provider, request.model, request.problem, thought)) {
+  for await (const d of streamProblemCode(provider, request.model, request.problem, thought, { source: 'other' })) {
     code += d
   }
 
