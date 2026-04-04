@@ -1,3 +1,6 @@
+import { tryExtractStructuredCodeString } from './modelStructuredParse.ts'
+import { splitThinkingFromModelCode } from './codePhaseSplit.ts'
+
 export interface LLMRequest {
   model: string
   prompt: string
@@ -11,6 +14,8 @@ export interface LLMRequest {
 
 export interface LLMResponse {
   thought: string
+  /** Code-phase reasoning / prose (not executable). */
+  codingThought: string
   code: string
 }
 
@@ -205,11 +210,10 @@ Rules:
 - The declaration above is authoritative: do not rename the function, change arity, or reorder parameters.
 - The harness calls ${entryPoint} according to that declaration and the problem description.
 - Small top-level helpers are allowed if the declared function remains exactly as above.
-- No markdown code fences around the solution. Include the JavaScript that implements the signature; if your endpoint emits internal reasoning in XML-style wrappers, that is acceptable alongside the code.
+- No markdown code fences around the whole solution unless you need a short fenced snippet for clarity; prefer raw top-level JavaScript.
 - Use a plain top-level function; do not export modules or place the required function inside an object.
-- Output exactly ONE complete top-level \`function ${entryPoint}\` (or the single declaration that matches the signature). Do not emit two full implementations of the same entry function—no draft-then-final duplicate, no repeating the same function after self-review. If you revise, replace mentally and stream only the final single version.
-- Do not paste verification commentary, complexity bullets, or quotes from system/user messages into the JavaScript body; keep that in your reasoning channel only, not as prose between two code copies.
-- Never output fake or partial XML markers (e.g. closing tags alone) in the JavaScript stream.`
+- Output exactly ONE complete top-level \`function ${entryPoint}\` (or the single declaration that matches the signature). Do not emit two full implementations of the same entry function.
+- If your API exposes a separate reasoning channel, use it for planning; keep the main message stream as the runnable program.`
 }
 
 export async function* streamProblemAnalysis(
@@ -250,10 +254,10 @@ ${problem.description}
 Required function signature (implement this declaration exactly):
 ${problem.functionSignature}
 
-Your earlier analysis (context only — do not repeat it in your output):
+Your earlier analysis (context only — do not repeat long prose in your output):
 ${analysis}
 
-Write only JavaScript that fulfills the required signature above. One final program: a single implementation of ${problem.entryPoint}, nothing duplicated.`
+Write the JavaScript implementation: a single ${problem.entryPoint} matching the signature, nothing duplicated.`
 
   const tag = logLabel ? `${logLabel} code` : 'code'
   yield* streamChat(provider, platformModelId, [
@@ -276,35 +280,10 @@ export function stripInterleavedThinking(text: string): string {
   for (const re of INTERTHINKING_BLOCK_RES) {
     s = s.replace(re, '\n')
   }
+  // Unclosed streaming tail (no </…> yet) — never send to QuickJS
+  s = s.replace(/<redacted_thinking>[\s\S]*$/gi, '\n')
+  s = s.replace(/<thinking>[\s\S]*$/gi, '\n')
   return s.trim()
-}
-
-function removeLeakedThinkingMarkers(s: string): string {
-  return s
-    .replace(/<\/redacted_thinking>/gi, '\n')
-    .replace(/<redacted_thinking>/gi, '\n')
-    .replace(/<\/thinking>/gi, '\n')
-    .replace(/<thinking>/gi, '\n')
-}
-
-/** Same heuristic as web `stripCodeFences.ts` for runnable extraction. */
-function extractLastMainBlock(s: string): { prefix: string; code: string } {
-  const re = /^function\s+main\b/gm
-  const idx: number[] = []
-  let m: RegExpExecArray | null
-  const r = new RegExp(re.source, 'gm')
-  while ((m = r.exec(s)) !== null) idx.push(m.index)
-  if (idx.length < 2) return { prefix: '', code: s }
-  const start = idx[idx.length - 1]!
-  return { prefix: s.slice(0, start).trim(), code: s.slice(start).trim() }
-}
-
-/** Drop natural-language preamble before first ```js fence (matches web split for runnable extraction). */
-function stripLeadingProseBeforeFence(s: string): string {
-  const t = s.trim()
-  const idx = t.search(/```(?:javascript|js)?/)
-  if (idx <= 0) return t
-  return t.slice(idx).trim()
 }
 
 /**
@@ -325,13 +304,14 @@ export function stripCodeFences(text: string): string {
   return body.trim()
 }
 
-/** Thinking strip, prose before fence, duplicate-main pick, then fences; use before executing generated code, not when persisting streamed battle output. */
+/** Runnable JS for harness; aligns with web prepareRunnableJavaScript. */
 export function prepareRunnableJavaScript(text: string): string {
-  let s = stripInterleavedThinking(text)
-  s = removeLeakedThinkingMarkers(s)
-  s = stripLeadingProseBeforeFence(s)
-  const { code } = extractLastMainBlock(s)
-  return stripCodeFences(code)
+  const structured = tryExtractStructuredCodeString(text)
+  if (structured) {
+    return stripCodeFences(stripInterleavedThinking(structured))
+  }
+  const { code } = splitThinkingFromModelCode(text)
+  return stripCodeFences(stripInterleavedThinking(code))
 }
 
 export async function callLLM(provider: 'minimax' | 'deepseek', request: LLMRequest): Promise<LLMResponse> {
@@ -349,8 +329,12 @@ export async function callLLM(provider: 'minimax' | 'deepseek', request: LLMRequ
     code += d
   }
 
+  const codingThought = splitThinkingFromModelCode(code).thinking
+  const runnable = prepareRunnableJavaScript(code) || '// No code generated'
+
   return {
     thought: thought.trim() || 'No analysis',
-    code: prepareRunnableJavaScript(code) || '// No code generated',
+    codingThought,
+    code: runnable,
   }
 }

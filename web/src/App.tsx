@@ -96,6 +96,7 @@ function buildMockBattle(problemId: string): BattleSession {
       status: 'running',
       phase: 'awaiting_execution',
       thought: MOCK_SOLUTION_MARKDOWN_A,
+      codingThought: '',
       code: 'function main(nums, target) {\n  let left = 0, right = nums.length - 1;\n  while (left < right) {\n    const sum = nums[left] + nums[right];\n    if (sum === target) return [left, right];\n    sum < target ? left++ : right--;\n  }\n  return [];\n}',
       selfTestCases: [
         { input: '[2,7,11,15], 9', expectedOutput: '[0,1]' },
@@ -111,6 +112,7 @@ function buildMockBattle(problemId: string): BattleSession {
       status: 'running',
       phase: 'awaiting_execution',
       thought: MOCK_SOLUTION_MARKDOWN_B,
+      codingThought: '',
       code: 'function main(nums, target) {\n  const map = new Map();\n  for (let i = 0; i < nums.length; i++) {\n    const complement = target - nums[i];\n    if (map.has(complement)) return [map.get(complement), i];\n    map.set(nums[i], i);\n  }\n  return [];\n}',
       selfTestCases: [
         { input: '[2,7,11,15], 9', expectedOutput: '[0,1]' },
@@ -549,6 +551,7 @@ function BattleResult({
           testCases={runTestCases}
           testsReady={battleTestsReady}
           submitOfficialToServer={fromServerBattle}
+          streamBattle={fromServerBattle && battle?.status === 'running'}
         />
       ) : (
         <div className="grid gap-4 text-sm text-muted-foreground sm:grid-cols-2">
