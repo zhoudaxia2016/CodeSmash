@@ -263,32 +263,32 @@ async function* streamChat(
   }
 }
 
-const ANALYSIS_SYSTEM = `You are an expert at algorithm design. For the given programming problem, explain your reasoning ONLY:
-- proposed approach
-- time and space complexity
-- edge cases to watch
+const ANALYSIS_SYSTEM = `你是算法设计专家。针对给定的编程题目，仅说明你的推理过程，内容包括：
+- 拟采用的思路
+- 时间与空间复杂度
+- 需要注意的边界情况
 
-Strict rules:
-- Do NOT write code.
-- Do NOT use markdown code fences (triple backticks).
-- Do NOT output function definitions or snippets that look like executable JavaScript.
-Use plain language; short bullet lists are fine.`
+严格规则：
+- 不要写代码。
+- 不要使用 Markdown 代码块（三个反引号）。
+- 不要输出函数定义或看起来像可执行 JavaScript 的片段。
+使用平实语言；短条目列表即可。`
 
 function buildCodeSystem(entryPoint: string, functionSignature: string): string {
-  return `You output JavaScript only for an automated test harness.
+  return `你为自动化测试框架只输出 JavaScript。
 
-Implement exactly this top-level declaration—identifier, parameter list, and return semantics. Types in the signature are hints; emit plain JavaScript.
+请严格实现以下顶层声明——标识符、参数列表与返回值语义一致。签名中的类型仅为提示；请输出纯 JavaScript。
 
 ${functionSignature}
 
-Rules:
-- The declaration above is authoritative: do not rename the function, change arity, or reorder parameters.
-- The harness calls ${entryPoint} according to that declaration and the problem description.
-- Small top-level helpers are allowed if the declared function remains exactly as above.
-- No markdown code fences around the whole solution unless you need a short fenced snippet for clarity; prefer raw top-level JavaScript.
-- Use a plain top-level function; do not export modules or place the required function inside an object.
-- Output exactly ONE complete top-level \`function ${entryPoint}\` (or the single declaration that matches the signature). Do not emit two full implementations of the same entry function.
-- If your API exposes a separate reasoning channel, use it for planning; keep the main message stream as the runnable program.`
+规则：
+- 以上声明为唯一权威来源：不得重命名函数、不得改变参数个数或顺序。
+- 测试框架会依据该声明和题目描述调用 ${entryPoint}。
+- 允许少量顶层辅助函数，但已声明的函数必须与上述完全一致。
+- 除非为清晰起见需要短代码块，否则不要用 Markdown 代码围栏包裹整个解法；优先输出原始顶层 JavaScript。
+- 使用普通顶层函数；不要 export 模块，也不要把要求的函数包在对象里。
+- 只输出恰好一个完整的顶层 \`function ${entryPoint}\`（或与签名匹配的唯一声明）。不要为同一入口函数输出两份完整实现。
+- 若 API 提供单独的推理通道，请在那里做规划；主消息流保持为可运行程序。`
 }
 
 export async function* streamProblemAnalysis(
@@ -297,15 +297,15 @@ export async function* streamProblemAnalysis(
   problem: ProblemPayload,
   options: StreamLlmOptions,
 ): AsyncGenerator<string, void, unknown> {
-  const user = `Title: ${problem.title}
+  const user = `题目：${problem.title}
 
-Description:
+题目描述：
 ${problem.description}
 
-Required function signature:
+要求的函数签名：
 ${problem.functionSignature}
 
-Analyze how you would solve this. Remember: no code.`
+请说明你打算如何求解本题。注意：不要写代码。`
 
   const logLabel = options.logLabel
     ? `${options.logLabel} analysis`
@@ -323,19 +323,19 @@ export async function* streamProblemCode(
   analysis: string,
   options: StreamLlmOptions,
 ): AsyncGenerator<string, void, unknown> {
-  const problemUser = `Title: ${problem.title}
+  const problemUser = `题目：${problem.title}
 
-Description:
+题目描述：
 ${problem.description}
 
-Required function signature (implement this declaration exactly):
+要求的函数签名（请严格按此声明实现）：
 ${problem.functionSignature}`
 
-  const assistantAnalysis = analysis.trim() || '(No analysis text was produced in the prior step.)'
+  const assistantAnalysis = analysis.trim() || '（上一步未产生分析文本。）'
 
   const codeUser =
-    `Write the JavaScript implementation: a single ${problem.entryPoint} matching the signature, nothing duplicated. ` +
-    `Rely on your analysis above; do not repeat long prose in your output.`
+    `请写出 JavaScript 实现：仅一个符合签名的 ${problem.entryPoint}，不要重复实现。` +
+    `基于你上文的分析完成实现；不要在输出中重复大段说明文字。`
 
   const logLabel = options.logLabel ? `${options.logLabel} code` : 'code'
   yield* streamChat(provider, platformModelId, [
@@ -410,10 +410,10 @@ export async function callLLM(provider: 'minimax' | 'deepseek', request: LLMRequ
   }
 
   const codingThought = splitThinkingFromModelCode(code).thinking
-  const runnable = prepareRunnableJavaScript(code) || '// No code generated'
+  const runnable = prepareRunnableJavaScript(code) || '// 未生成代码'
 
   return {
-    thought: thought.trim() || 'No analysis',
+    thought: thought.trim() || '无分析内容',
     codingThought,
     code: runnable,
   }
