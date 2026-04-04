@@ -10,6 +10,50 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 
+type ModelResult = {
+  status: 'completed' | 'failed'
+  thought: string
+  code: string
+  selfTestCases: { input: string; expectedOutput: string }[]
+  selfTestConclusion: string
+  officialPassed: number
+  officialTotal: number
+  officialTimeMs: number
+  timeMs: number
+  error?: string
+}
+
+const MOCK_BATTLE_RESULT = {
+  modelAResult: {
+    status: 'completed' as const,
+    thought: 'Use two-pointer approach. Start from both ends and move towards center.',
+    code: 'function twoSum(nums, target) {\n  let left = 0, right = nums.length - 1;\n  while (left < right) {\n    const sum = nums[left] + nums[right];\n    if (sum === target) return [left, right];\n    sum < target ? left++ : right--;\n  }\n  return [];\n}',
+    selfTestCases: [
+      { input: '[2,7,11,15], 9', expectedOutput: '[0,1]' },
+      { input: '[3,2,4], 6', expectedOutput: '[1,2]' },
+    ],
+    selfTestConclusion: '自测通过',
+    officialPassed: 8,
+    officialTotal: 10,
+    officialTimeMs: 45,
+    timeMs: 120,
+  } as ModelResult,
+  modelBResult: {
+    status: 'completed' as const,
+    thought: 'Hash map approach. Store complement for each element.',
+    code: 'function twoSum(nums, target) {\n  const map = new Map();\n  for (let i = 0; i < nums.length; i++) {\n    const complement = target - nums[i];\n    if (map.has(complement)) return [map.get(complement), i];\n    map.set(nums[i], i);\n  }\n  return [];\n}',
+    selfTestCases: [
+      { input: '[2,7,11,15], 9', expectedOutput: '[0,1]' },
+      { input: '[3,2,4], 6', expectedOutput: '[1,2]' },
+    ],
+    selfTestConclusion: '自测通过',
+    officialPassed: 10,
+    officialTotal: 10,
+    officialTimeMs: 38,
+    timeMs: 95,
+  } as ModelResult,
+}
+
 function App() {
   const { data: models = [] } = useModels()
   const { data: problems = [] } = useProblems()
@@ -197,12 +241,13 @@ function BattleView({ models, problems }: { models: any[]; problems: any[] }) {
         Start Battle
       </Button>
 
-      {battle && <BattleResult session={battle} modelAName={modelAName} modelBName={modelBName} />}
+      <BattleResult session={battle} modelAName={modelAName} modelBName={modelBName} />
     </div>
   )
 }
 
 function BattleResult({ session, modelAName, modelBName }: { session: any; modelAName: string; modelBName: string }) {
+  const result = session ?? MOCK_BATTLE_RESULT
   return (
     <Card>
       <CardHeader>
@@ -210,55 +255,48 @@ function BattleResult({ session, modelAName, modelBName }: { session: any; model
       </CardHeader>
       <CardContent>
         <div className="grid grid-cols-2 gap-4">
-          {session.modelAResult && <ModelResultCard result={session.modelAResult} label={modelAName} />}
-          {session.modelBResult && <ModelResultCard result={session.modelBResult} label={modelBName} />}
+          {result.modelAResult && <ModelResultCard result={result.modelAResult} label={modelAName} />}
+          {result.modelBResult && <ModelResultCard result={result.modelBResult} label={modelBName} />}
         </div>
       </CardContent>
     </Card>
   )
 }
 
-function ModelResultCard({ result, label }: { result: any; label: string }) {
+function ModelResultCard({ result, label }: { result: ModelResult; label: string }) {
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>{label}</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div className="space-y-2 text-sm">
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Status</span>
-            <span className="font-medium">{result.status}</span>
-          </div>
-          {result.officialResult && (
-            <>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Pass Rate</span>
-                <span className="font-medium">{result.officialResult.passed}/{result.officialResult.total}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Time</span>
-                <span className="font-medium">{result.timeMs}ms</span>
-              </div>
-            </>
-          )}
+    <div className="space-y-3">
+      <div className="flex items-center gap-2">
+        <span className="font-semibold text-foreground">{label}</span>
+        <span className={`text-xs px-1.5 py-0.5 rounded ${result.status === 'completed' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
+          {result.status}
+        </span>
+      </div>
+      <div className="flex gap-6 text-sm">
+        <div>
+          <span className="text-muted-foreground">Pass Rate</span>
+          <span className="ml-2 font-medium">{result.officialPassed}/{result.officialTotal}</span>
         </div>
-        {result.thought && (
-          <div className="mt-4 p-3 bg-muted rounded-lg border">
-            <p className="text-xs text-muted-foreground mb-1">Solution</p>
-            <p className="text-sm whitespace-pre-wrap">{result.thought}</p>
-          </div>
-        )}
-        {result.code && (
-          <div className="mt-4 p-3 rounded-lg border border-border bg-arena-code">
-            <p className="text-xs text-muted-foreground mb-1.5 font-medium">Generated Code</p>
-            <pre className="text-sm text-arena-code-fg overflow-x-auto font-mono leading-relaxed">
-              {result.code}
-            </pre>
-          </div>
-        )}
-      </CardContent>
-    </Card>
+        <div>
+          <span className="text-muted-foreground">Time</span>
+          <span className="ml-2 font-medium">{result.timeMs}ms</span>
+        </div>
+      </div>
+      {result.thought && (
+        <div className="p-3 bg-muted rounded-lg border">
+          <p className="text-xs text-muted-foreground mb-1">Solution</p>
+          <p className="text-sm whitespace-pre-wrap">{result.thought}</p>
+        </div>
+      )}
+      {result.code && (
+        <div className="p-3 rounded-lg border border-border bg-arena-code">
+          <p className="text-xs text-muted-foreground mb-1.5 font-medium">Generated Code</p>
+          <pre className="text-sm text-arena-code-fg overflow-x-auto font-mono leading-relaxed">
+            {result.code}
+          </pre>
+        </div>
+      )}
+    </div>
   )
 }
 
