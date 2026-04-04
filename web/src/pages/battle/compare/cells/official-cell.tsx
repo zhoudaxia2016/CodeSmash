@@ -41,7 +41,7 @@ export function OfficialCell({ hook }: { hook: ModelSideHook }) {
             displayResult.phase === 'awaiting_execution' &&
             !failedLlm &&
             !testsReady && (
-              <p className="text-sm text-muted-foreground px-2">正在加载官方用例列表…</p>
+              <p className="text-sm text-muted-foreground px-2">正在加载测试用例列表…</p>
             )}
           {localPhase === 'idle' &&
             displayResult.phase === 'awaiting_execution' &&
@@ -49,7 +49,7 @@ export function OfficialCell({ hook }: { hook: ModelSideHook }) {
             testsReady &&
             enabledCaseCount > 0 && (
               <p className="text-sm text-muted-foreground px-2">
-                即将在本机依次运行 {enabledCaseCount} 条官方用例…
+                即将在本机依次运行 {enabledCaseCount} 条测试用例…
               </p>
             )}
           {localPhase === 'idle' &&
@@ -58,15 +58,15 @@ export function OfficialCell({ hook }: { hook: ModelSideHook }) {
             testsReady &&
             enabledCaseCount === 0 && (
               <p className="text-sm text-amber-700 dark:text-amber-400 px-2">
-                当前题目没有启用的官方用例，无法评测。
+                当前题目没有启用的测试用例，无法评测。
               </p>
             )}
           {failedLlm && (
-            <p className="text-sm text-muted-foreground px-2">模型生成失败，跳过执行与官方评测。</p>
+            <p className="text-sm text-muted-foreground px-2">模型生成失败，跳过执行与测试评测。</p>
           )}
           {localPhase === 'running_tests' && runProgress && (
             <div className="space-y-2 px-2">
-              <p className="text-sm text-foreground">正在执行官方用例…</p>
+              <p className="text-sm text-foreground">正在执行测试用例…</p>
               <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
                 <div
                   className="h-full bg-arena-accent transition-[width] duration-200"
@@ -82,7 +82,7 @@ export function OfficialCell({ hook }: { hook: ModelSideHook }) {
           )}
           {localPhase === 'error' && officialError === 'run' && (
             <div className="space-y-2 px-2 text-sm text-red-600 dark:text-red-400">
-              <p>官方用例未能在本机跑完。请刷新页面；若仍失败，请重启本地开发服务后再试。</p>
+              <p>测试用例未能在本机跑完。请刷新页面；若仍失败，请重启本地开发服务后再试。</p>
               {runFailureDetail && (
                 <pre className="max-h-32 overflow-auto whitespace-pre-wrap break-all rounded-md border border-red-500/30 bg-red-500/5 p-2 text-xs text-red-700 dark:text-red-300">
                   {runFailureDetail}
@@ -92,7 +92,7 @@ export function OfficialCell({ hook }: { hook: ModelSideHook }) {
           )}
           {officialError === 'save' && submitOfficialToServer && (
             <p className="text-sm text-amber-800 dark:text-amber-200 px-2">
-              本机评测已完成；写入对战服务失败（需网络与接口可用）。可刷新重试同步。
+              本地测试已完成；写入对战服务失败（需网络与接口可用）。可刷新重试同步。
             </p>
           )}
 
@@ -110,7 +110,7 @@ export function OfficialCell({ hook }: { hook: ModelSideHook }) {
               {displayResult.officialResult &&
                 displayResult.officialResult.total === 0 &&
                 displayResult.phase === 'completed' && (
-                  <p className="text-xs text-muted-foreground">没有启用的官方用例，未执行评测。</p>
+                  <p className="text-xs text-muted-foreground">没有启用的测试用例，未执行评测。</p>
                 )}
               {displayResult.officialResult &&
                 displayResult.officialResult.total > 0 &&

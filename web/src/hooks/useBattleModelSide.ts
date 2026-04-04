@@ -35,7 +35,7 @@ export function activityLabel(r: ModelResult): string {
   if (r.status === 'running' || r.status === 'pending') {
     if (r.phase === 'analyzing') return '生成分析中'
     if (r.phase === 'coding') return '生成代码中'
-    if (r.phase === 'awaiting_execution') return '待本机评测'
+    if (r.phase === 'awaiting_execution') return '代码已就绪，将运行测试'
     if (r.phase === 'pending') return '排队'
     if (r.phase === 'failed') return statusLabel('failed')
   }

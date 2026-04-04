@@ -78,11 +78,20 @@ function App() {
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         <header className="z-10 shrink-0 border-b border-border/80 bg-arena-header-blur/85 backdrop-blur-md supports-[backdrop-filter]:bg-background/75">
           <div className="mx-auto w-full max-w-7xl px-6 py-4 sm:px-8 lg:px-10">
-            <h1 className="text-xl font-semibold text-foreground tracking-tight">
-              {view === 'battle' && 'Battle'}
-              {view === 'problems' && 'Problems'}
-              {view === 'leaderboard' && 'Leaderboard'}
-            </h1>
+            {view === 'battle' ? (
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between lg:gap-6">
+                <h1 className="shrink-0 text-xl font-semibold tracking-tight text-foreground">Battle</h1>
+                <div
+                  id="battle-header-slot"
+                  className="flex min-w-0 flex-1 flex-wrap items-center gap-2 lg:justify-end"
+                />
+              </div>
+            ) : (
+              <h1 className="text-xl font-semibold tracking-tight text-foreground">
+                {view === 'problems' && 'Problems'}
+                {view === 'leaderboard' && 'Leaderboard'}
+              </h1>
+            )}
           </div>
         </header>
 
