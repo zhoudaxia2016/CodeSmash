@@ -323,23 +323,26 @@ export async function* streamProblemCode(
   analysis: string,
   options: StreamLlmOptions,
 ): AsyncGenerator<string, void, unknown> {
-  const user = `Title: ${problem.title}
+  const problemUser = `Title: ${problem.title}
 
 Description:
 ${problem.description}
 
 Required function signature (implement this declaration exactly):
-${problem.functionSignature}
+${problem.functionSignature}`
 
-Your earlier analysis (context only — do not repeat long prose in your output):
-${analysis}
+  const assistantAnalysis = analysis.trim() || '(No analysis text was produced in the prior step.)'
 
-Write the JavaScript implementation: a single ${problem.entryPoint} matching the signature, nothing duplicated.`
+  const codeUser =
+    `Write the JavaScript implementation: a single ${problem.entryPoint} matching the signature, nothing duplicated. ` +
+    `Rely on your analysis above; do not repeat long prose in your output.`
 
   const logLabel = options.logLabel ? `${options.logLabel} code` : 'code'
   yield* streamChat(provider, platformModelId, [
     { role: 'system', content: buildCodeSystem(problem.entryPoint, problem.functionSignature) },
-    { role: 'user', content: user },
+    { role: 'user', content: problemUser },
+    { role: 'assistant', content: assistantAnalysis },
+    { role: 'user', content: codeUser },
   ], { ...options, logLabel })
 }
 
