@@ -16,55 +16,75 @@ function App() {
   const [view, setView] = useState<'battle' | 'problems' | 'leaderboard'>('battle')
 
   return (
-    <div className="min-h-screen flex" style={{ backgroundColor: '#fcfaf8' }}>
-      <aside className="w-64 border-r border-border p-4 flex flex-col">
-        <div className="flex items-center gap-2 mb-8 px-2">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
-            <span className="text-white font-bold text-sm">CS</span>
+    <div className="min-h-screen flex bg-background">
+      <aside className="w-64 shrink-0 border-r border-arena-sidebar-border bg-arena-sidebar p-4 flex flex-col">
+        <div className="flex items-center gap-2.5 mb-8 px-2">
+          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center shadow-sm ring-1 ring-white/10">
+            <span className="text-white font-bold text-sm tracking-tight">CS</span>
           </div>
-          <span className="font-semibold text-gray-900">CodeSmash</span>
+          <div className="flex flex-col gap-0.5 min-w-0">
+            <span className="font-semibold text-foreground tracking-tight truncate">CodeSmesh</span>
+            <span className="text-[11px] text-muted-foreground font-medium uppercase tracking-wider">
+              Arena
+            </span>
+          </div>
         </div>
-        <nav className="flex flex-col gap-1">
+        <nav className="flex flex-col gap-0.5" aria-label="Main">
           <button
+            type="button"
             onClick={() => setView('battle')}
-            className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+            className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors text-left ${
               view === 'battle'
-                ? 'bg-gray-100 text-gray-900'
-                : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                ? 'bg-arena-sidebar-active text-arena-sidebar-active-fg shadow-arena'
+                : 'text-arena-sidebar-foreground hover:bg-arena-sidebar-active/60 hover:text-foreground'
             }`}
           >
-            <span className="w-2 h-2 rounded-full bg-blue-500" />
+            <span
+              className={`w-2 h-2 rounded-full shrink-0 ${
+                view === 'battle' ? 'bg-arena-accent shadow-[0_0_8px_hsl(var(--arena-accent)/0.55)]' : 'bg-muted-foreground/40'
+              }`}
+            />
             Battle
           </button>
           <button
+            type="button"
             onClick={() => setView('problems')}
-            className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+            className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors text-left ${
               view === 'problems'
-                ? 'bg-gray-100 text-gray-900'
-                : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                ? 'bg-arena-sidebar-active text-arena-sidebar-active-fg shadow-arena'
+                : 'text-arena-sidebar-foreground hover:bg-arena-sidebar-active/60 hover:text-foreground'
             }`}
           >
-            <span className="w-2 h-2 rounded-full bg-green-500" />
+            <span
+              className={`w-2 h-2 rounded-full shrink-0 ${
+                view === 'problems' ? 'bg-emerald-400/90' : 'bg-muted-foreground/40'
+              }`}
+            />
             Problems
           </button>
           <button
+            type="button"
             onClick={() => setView('leaderboard')}
-            className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+            className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors text-left ${
               view === 'leaderboard'
-                ? 'bg-gray-100 text-gray-900'
-                : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                ? 'bg-arena-sidebar-active text-arena-sidebar-active-fg shadow-arena'
+                : 'text-arena-sidebar-foreground hover:bg-arena-sidebar-active/60 hover:text-foreground'
             }`}
           >
-            <span className="w-2 h-2 rounded-full bg-purple-500" />
+            <span
+              className={`w-2 h-2 rounded-full shrink-0 ${
+                view === 'leaderboard' ? 'bg-violet-400/90' : 'bg-muted-foreground/40'
+              }`}
+            />
             Leaderboard
           </button>
         </nav>
       </aside>
 
-      <div className="flex-1">
-        <header className="border-b border-border">
-          <div className="max-w-5xl mx-auto px-8 py-4">
-            <h1 className="text-xl font-semibold text-gray-900">
+      <div className="flex-1 min-w-0 flex flex-col">
+        <header className="sticky top-0 z-10 border-b border-border/80 bg-arena-header-blur/85 backdrop-blur-md supports-[backdrop-filter]:bg-background/75">
+          <div className="w-full max-w-none px-6 sm:px-8 lg:px-12 xl:px-16 py-4">
+            <h1 className="text-xl font-semibold text-foreground tracking-tight">
               {view === 'battle' && 'Battle'}
               {view === 'problems' && 'Problems'}
               {view === 'leaderboard' && 'Leaderboard'}
@@ -72,7 +92,7 @@ function App() {
           </div>
         </header>
 
-        <main className="max-w-5xl mx-auto px-8 py-6">
+        <main className="w-full max-w-none px-6 sm:px-8 lg:px-12 xl:px-16 py-8 flex-1">
           {view === 'battle' && <BattleView models={models} problems={problems} />}
           {view === 'problems' && <ProblemsView />}
           {view === 'leaderboard' && <LeaderboardView />}
@@ -230,9 +250,11 @@ function ModelResultCard({ result, label }: { result: any; label: string }) {
           </div>
         )}
         {result.code && (
-          <div className="mt-4 p-3 bg-black rounded-lg">
-            <p className="text-xs text-gray-400 mb-1">Generated Code</p>
-            <pre className="text-sm text-green-400 overflow-x-auto">{result.code}</pre>
+          <div className="mt-4 p-3 rounded-lg border border-border bg-arena-code">
+            <p className="text-xs text-muted-foreground mb-1.5 font-medium">Generated Code</p>
+            <pre className="text-sm text-arena-code-fg overflow-x-auto font-mono leading-relaxed">
+              {result.code}
+            </pre>
           </div>
         )}
       </CardContent>
