@@ -17,8 +17,8 @@ type ColumnHeaderProps = { label: string; hook: ModelSideHook }
 export function ColumnHeader({ label, hook }: ColumnHeaderProps) {
   const { displayResult, ok, failedLlm } = hook
   return (
-    <div className="flex flex-wrap items-center gap-2 min-h-[1.75rem]">
-      <span className="font-semibold text-foreground">{label}</span>
+    <div className="flex min-h-0 flex-wrap items-center gap-2">
+      <span className="font-semibold leading-tight text-foreground">{label}</span>
       <span
         className={`rounded px-1.5 py-0.5 text-xs ${
           ok

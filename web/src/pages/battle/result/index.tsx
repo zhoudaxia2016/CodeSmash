@@ -78,8 +78,11 @@ export function Result({
           </span>
         </div>
       ) : (
-        <div className="flex flex-wrap justify-end gap-2">
-          <span className="text-xs text-muted-foreground">示例预览（未发起真实对战）</span>
+        <div className="rounded-lg border border-border/80 bg-muted/25 px-3 py-2.5 text-left">
+          <p className="text-xs font-medium text-foreground">演示数据（虚构，非模型生成）</p>
+          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+            用于在你点击「开始对战」之前，预览对战结束后的页面结构：双模型并列、分析 → 代码 → 测试的流程与最终结果形态。发起对战后，此处会替换为真实输出。
+          </p>
         </div>
       )}
       {effective.modelAResult && effective.modelBResult ? (

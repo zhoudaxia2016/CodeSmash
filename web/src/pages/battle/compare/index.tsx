@@ -67,8 +67,8 @@ export function Compare({
         runDoneA={hookA.runProgress?.done}
         runDoneB={hookB.runProgress?.done}
       />
-      <div className="flex min-h-0 min-w-0 flex-col gap-8">
-        <div className="grid min-h-0 grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-8">
+      <div className="flex min-h-0 min-w-0 flex-col gap-4">
+        <div className="grid min-h-0 grid-cols-1 gap-2 sm:grid-cols-2 sm:items-center sm:gap-x-6 sm:gap-y-1">
           <ColumnHeader label={modelAName} hook={hookA} />
           <ColumnHeader label={modelBName} hook={hookB} />
         </div>
