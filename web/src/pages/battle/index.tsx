@@ -1,13 +1,12 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useLayoutEffect, useMemo } from 'react'
+import { createPortal } from 'react-dom'
 import { ChevronDown } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useProblem, useStartBattle, useBattle } from '@/hooks/useApi'
 import type { PlatformModel, Problem, TestCase } from '@/types'
 import { Result } from './result'
-import { CopyVerifySnippetButton } from './compare/copy-verify-snippet-button'
-import { buildVerifySnippetStub } from '@/lib/copyTestHarness'
+import { CodeBlock } from '@/components/code-block'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   Select,
   SelectContent,
@@ -15,6 +14,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+
+const HEADER_SLOT_ID = 'battle-header-slot'
 
 export function Battle({ models, problems }: { models: PlatformModel[]; problems: Problem[] }) {
   const queryClient = useQueryClient()
@@ -37,11 +38,16 @@ export function Battle({ models, problems }: { models: PlatformModel[]; problems
     if (!selectedProblem || !problemForBattleQuery.isSuccess) return []
     return problemForBattleQuery.data?.testCases ?? []
   }, [problemForBattleQuery.isSuccess, problemForBattleQuery.data?.testCases, selectedProblem])
-  /** 仅 API 成功后才用官方用例；失败或无数据时不兜底 mock */
+  /** 仅 API 成功后才用题目用例；失败或无数据时不兜底 mock */
   const battleTestsReady = !!selectedProblem && problemForBattleQuery.isSuccess
 
   const selectedProblemRow = problems.find((p) => p.id === selectedProblem)
-  const officialTestCases: TestCase[] = problemDetail?.testCases ?? []
+  const problemDetailTestCases: TestCase[] = problemDetail?.testCases ?? []
+
+  const [headerSlotEl, setHeaderSlotEl] = useState<HTMLElement | null>(null)
+  useLayoutEffect(() => {
+    setHeaderSlotEl(document.getElementById(HEADER_SLOT_ID))
+  }, [])
 
   useEffect(() => {
     if (problems.length > 0 && !selectedProblem) {
@@ -80,166 +86,165 @@ export function Battle({ models, problems }: { models: PlatformModel[]; problems
     )
   }
 
+  const headerControls = (
+    <div className="flex w-full min-w-0 flex-wrap items-center gap-2">
+      <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+      <Select value={selectedProblem} onValueChange={setSelectedProblem}>
+        <SelectTrigger
+          className="h-9 min-w-[10rem] max-w-[20rem] flex-1 sm:flex-none sm:max-w-[18rem]"
+          aria-label="选择题目"
+        >
+          <SelectValue placeholder="题目…" />
+        </SelectTrigger>
+        <SelectContent>
+          {problems.map((p) => (
+            <SelectItem key={p.id} value={p.id}>
+              {p.title}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <Select value={modelA} onValueChange={setModelA}>
+        <SelectTrigger
+          className="h-9 w-full min-w-[8rem] sm:w-[11rem]"
+          aria-label="模型 A"
+        >
+          <SelectValue placeholder="Model A" />
+        </SelectTrigger>
+        <SelectContent>
+          {models.map((m) => (
+            <SelectItem key={m.id} value={m.id}>
+              {m.name}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <Select value={modelB} onValueChange={setModelB}>
+        <SelectTrigger
+          className="h-9 w-full min-w-[8rem] sm:w-[11rem]"
+          aria-label="模型 B"
+        >
+          <SelectValue placeholder="Model B" />
+        </SelectTrigger>
+        <SelectContent>
+          {models.map((m) => (
+            <SelectItem key={m.id} value={m.id}>
+              {m.name}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="shrink-0 gap-1.5"
+        disabled={!selectedProblemRow}
+        aria-expanded={problemDetailOpen}
+        onClick={() => setProblemDetailOpen((o) => !o)}
+      >
+        题目与用例
+        <ChevronDown
+          className={`h-3.5 w-3.5 text-muted-foreground transition-transform ${problemDetailOpen ? 'rotate-180' : ''}`}
+          aria-hidden
+        />
+      </Button>
+      </div>
+      <Button
+        type="button"
+        disabled={!canStart || battleStarting}
+        onClick={handleStartBattle}
+        className="h-9 shrink-0"
+      >
+        {battleStarting ? '创建中…' : '开始对战'}
+      </Button>
+    </div>
+  )
+
   return (
     <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle>Select Problem</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-0">
-          <Select value={selectedProblem} onValueChange={setSelectedProblem}>
-            <SelectTrigger className="w-full">
-              <SelectValue placeholder="Choose a problem..." />
-            </SelectTrigger>
-            <SelectContent>
-              {problems.map((p) => (
-                <SelectItem key={p.id} value={p.id}>{p.title}</SelectItem>
+      {headerSlotEl ? createPortal(headerControls, headerSlotEl) : null}
+
+      {problemDetailOpen && selectedProblemRow && (
+        <section
+          className="rounded-lg border border-border bg-card p-4 text-sm shadow-sm"
+          aria-label="题目与测试用例"
+        >
+          <div>
+            <div className="mb-1 flex flex-wrap items-center gap-2">
+              <span className="font-semibold text-foreground">{selectedProblemRow.title}</span>
+              {selectedProblemRow.difficulty && (
+                <span className="rounded-md bg-secondary px-1.5 py-0.5 text-[11px] font-medium uppercase tracking-wide text-secondary-foreground">
+                  {selectedProblemRow.difficulty}
+                </span>
+              )}
+              {selectedProblemRow.tags?.map((tag) => (
+                <span
+                  key={tag}
+                  className="rounded-md border border-border bg-background px-1.5 py-0.5 text-[11px] text-muted-foreground"
+                >
+                  {tag}
+                </span>
               ))}
-            </SelectContent>
-          </Select>
-
-          <button
-            type="button"
-            onClick={() => setProblemDetailOpen((o) => !o)}
-            disabled={!selectedProblemRow}
-            className="mt-4 flex w-full items-center justify-between gap-2 rounded-lg border border-border bg-muted/40 px-3 py-2.5 text-left text-sm font-medium text-foreground transition-colors hover:bg-muted/70 disabled:pointer-events-none disabled:opacity-50"
-            aria-expanded={problemDetailOpen}
-          >
-            <span>题目描述与官方测试用例</span>
-            <ChevronDown
-              className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${problemDetailOpen ? 'rotate-180' : ''}`}
-              aria-hidden
-            />
-          </button>
-
-          {problemDetailOpen && selectedProblemRow && (
-            <div className="mt-3 space-y-4 rounded-lg border border-border bg-card p-4 text-sm">
-              <div>
-                <div className="mb-1 flex flex-wrap items-center gap-2">
-                  <span className="font-semibold text-foreground">{selectedProblemRow.title}</span>
-                  {selectedProblemRow.difficulty && (
-                    <span className="rounded-md bg-secondary px-1.5 py-0.5 text-[11px] font-medium uppercase tracking-wide text-secondary-foreground">
-                      {selectedProblemRow.difficulty}
-                    </span>
-                  )}
-                  {selectedProblemRow.tags?.map((tag) => (
-                    <span
-                      key={tag}
-                      className="rounded-md border border-border bg-background px-1.5 py-0.5 text-[11px] text-muted-foreground"
-                    >
-                      {tag}
-                    </span>
-                  ))}
-                </div>
-                <p className="whitespace-pre-wrap text-muted-foreground leading-relaxed">
-                  {selectedProblemRow.description}
-                </p>
-              </div>
-
-              <div>
-                <p className="mb-1 text-xs font-medium text-muted-foreground">入口与签名</p>
-                <p className="text-xs text-muted-foreground">
-                  函数名：<code className="rounded bg-muted px-1 py-0.5 font-mono">{selectedProblemRow.entryPoint}</code>
-                </p>
-                <pre className="mt-2 overflow-x-auto rounded-md border border-border bg-muted/50 p-3 font-mono text-xs text-foreground">
-                  {selectedProblemRow.functionSignature}
-                </pre>
-              </div>
-
-              <div>
-                <p className="mb-2 text-xs font-medium text-muted-foreground">
-                  官方测试用例
-                  {problemDetailLoading && '（加载中…）'}
-                  {problemDetailError && !problemDetail && (
-                    <span className="ml-1 font-normal text-amber-600 dark:text-amber-400">
-                      （接口不可用，已使用本地示例数据）
-                    </span>
-                  )}
-                </p>
-                {problemDetailLoading && officialTestCases.length === 0 ? (
-                  <p className="text-muted-foreground">正在加载测试用例…</p>
-                ) : officialTestCases.length === 0 ? (
-                  <p className="text-muted-foreground">暂无测试用例</p>
-                ) : (
-                  <div className="overflow-x-auto rounded-md border border-border">
-                    <table className="w-full min-w-[32rem] text-left text-xs">
-                      <thead className="border-b border-border bg-muted/50 font-medium text-muted-foreground">
-                        <tr>
-                          <th className="px-3 py-2 w-10">#</th>
-                          <th className="px-3 py-2">输入（main 参数）</th>
-                          <th className="px-3 py-2">期望输出</th>
-                          <th className="px-3 py-2 w-24">来源</th>
-                          <th className="px-3 py-2 w-[5.5rem] shrink-0">验证</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-border">
-                        {officialTestCases.map((tc, idx) => (
-                          <tr key={tc.id} className="bg-background/50">
-                            <td className="px-3 py-2 font-mono text-muted-foreground">{idx + 1}</td>
-                            <td className="px-3 py-2 font-mono text-foreground">{tc.input}</td>
-                            <td className="px-3 py-2 font-mono text-foreground">{tc.expectedOutput}</td>
-                            <td className="px-3 py-2 text-muted-foreground">
-                              {tc.source === 'generated' ? '生成' : '手工'}
-                            </td>
-                            <td className="px-3 py-2 align-middle">
-                              <CopyVerifySnippetButton
-                                text={buildVerifySnippetStub(
-                                  tc.input,
-                                  tc.expectedOutput,
-                                  selectedProblemRow.functionSignature,
-                                )}
-                                label="复制"
-                              />
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
             </div>
-          )}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Select Two Models</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-2 gap-4">
-            <Select value={modelA} onValueChange={setModelA}>
-              <SelectTrigger>
-                <SelectValue placeholder="Model A" />
-              </SelectTrigger>
-              <SelectContent>
-                {models.map((m) => (
-                  <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select value={modelB} onValueChange={setModelB}>
-              <SelectTrigger>
-                <SelectValue placeholder="Model B" />
-              </SelectTrigger>
-              <SelectContent>
-                {models.map((m) => (
-                  <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <p className="whitespace-pre-wrap leading-relaxed text-muted-foreground">
+              {selectedProblemRow.description}
+            </p>
           </div>
-        </CardContent>
-      </Card>
 
-      <Button
-        disabled={!canStart}
-        onClick={handleStartBattle}
-        className="w-full"
-      >
-        Start Battle
-      </Button>
+          <div className="mt-6">
+            <p className="mb-1 text-xs font-medium text-muted-foreground">入口与签名</p>
+            <p className="text-xs text-muted-foreground">
+              函数名：
+              <code className="rounded bg-muted px-1 py-0.5 font-mono">
+                {selectedProblemRow.entryPoint}
+              </code>
+            </p>
+            <CodeBlock
+              code={selectedProblemRow.functionSignature}
+              className="m-0 mt-2 overflow-x-auto rounded-md border border-border bg-muted/50 p-3 font-mono text-xs leading-relaxed text-foreground whitespace-pre"
+            />
+          </div>
+
+          <div className="mt-6">
+            <p className="mb-2 text-xs font-medium text-muted-foreground">
+              测试用例
+              {problemDetailLoading && '（加载中…）'}
+              {problemDetailError && !problemDetail && (
+                <span className="ml-1 font-normal text-amber-600 dark:text-amber-400">
+                  （接口不可用，已使用本地示例数据）
+                </span>
+              )}
+            </p>
+            {problemDetailLoading && problemDetailTestCases.length === 0 ? (
+              <p className="text-muted-foreground">正在加载测试用例…</p>
+            ) : problemDetailTestCases.length === 0 ? (
+              <p className="text-muted-foreground">暂无测试用例</p>
+            ) : (
+              <div className="overflow-x-auto rounded-md border border-border">
+                <table className="w-full min-w-[18rem] text-left text-xs">
+                  <thead className="border-b border-border bg-muted/50 font-medium text-muted-foreground">
+                    <tr>
+                      <th className="w-10 px-3 py-2">#</th>
+                      <th className="px-3 py-2">输入（main 参数）</th>
+                      <th className="px-3 py-2">期望输出</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {problemDetailTestCases.map((tc, idx) => (
+                      <tr key={tc.id} className="bg-background/50">
+                        <td className="px-3 py-2 font-mono text-muted-foreground">{idx + 1}</td>
+                        <td className="px-3 py-2 font-mono text-foreground">{tc.input}</td>
+                        <td className="px-3 py-2 font-mono text-foreground">{tc.expectedOutput}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </section>
+      )}
 
       <Result
         battle={battle}

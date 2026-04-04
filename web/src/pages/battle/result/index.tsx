@@ -29,8 +29,7 @@ export function Result({
 }: Props) {
   if (starting && !battleId) {
     return (
-      <section className="space-y-4 border-t border-border pt-6">
-        <h2 className="text-lg font-semibold tracking-tight text-foreground">Battle result</h2>
+      <section className="space-y-4">
         <p className="text-sm text-muted-foreground">正在创建对战…</p>
       </section>
     )
@@ -38,8 +37,7 @@ export function Result({
 
   if (battleLoading) {
     return (
-      <section className="space-y-4 border-t border-border pt-6">
-        <h2 className="text-lg font-semibold tracking-tight text-foreground">Battle result</h2>
+      <section className="space-y-4">
         <p className="text-sm text-muted-foreground">正在拉取对战状态…</p>
       </section>
     )
@@ -47,8 +45,7 @@ export function Result({
 
   if (battleError) {
     return (
-      <section className="space-y-4 border-t border-border pt-6">
-        <h2 className="text-lg font-semibold tracking-tight text-foreground">Battle result</h2>
+      <section className="space-y-4">
         <p className="text-sm text-red-600 dark:text-red-400">对战数据加载失败，请确认 API 可用后重试。</p>
       </section>
     )
@@ -56,8 +53,7 @@ export function Result({
 
   if (battleId != null && battle == null) {
     return (
-      <section className="space-y-4 border-t border-border pt-6">
-        <h2 className="text-lg font-semibold tracking-tight text-foreground">Battle result</h2>
+      <section className="space-y-4">
         <p className="text-sm text-muted-foreground">暂无对战数据。</p>
       </section>
     )
@@ -68,21 +64,24 @@ export function Result({
   const battleStatusLabel: Record<string, string> = {
     pending: '排队中',
     running: '模型输出中',
-    awaiting_client: '等待本机跑官方用例',
+    awaiting_client: '模型输出完成，等待在本地运行测试',
     completed: '已完成',
     failed: '失败',
     partial: '部分完成',
   }
   return (
-    <section className="space-y-4 border-t border-border pt-6">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="text-lg font-semibold tracking-tight text-foreground">Battle result</h2>
-        <span className="text-xs text-muted-foreground">
-          {fromServerBattle
-            ? battleStatusLabel[battle.status] ?? battle.status
-            : `示例对战 · ${battleStatusLabel[effective.status] ?? effective.status}`}
-        </span>
-      </div>
+    <section className="space-y-4">
+      {fromServerBattle ? (
+        <div className="flex flex-wrap justify-end gap-2">
+          <span className="text-xs text-muted-foreground">
+            {battleStatusLabel[battle.status] ?? battle.status}
+          </span>
+        </div>
+      ) : (
+        <div className="flex flex-wrap justify-end gap-2">
+          <span className="text-xs text-muted-foreground">示例预览（未发起真实对战）</span>
+        </div>
+      )}
       {effective.modelAResult && effective.modelBResult ? (
         <Compare
           key={`${effective.id}-${effective.problemId}-compare`}

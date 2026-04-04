@@ -65,7 +65,7 @@ export function CompactOfficialTiming({
               ·
             </span>
           )}
-          <LabeledDuration label="执行" ms={exec!} title="官方用例在本机执行耗时" />
+          <LabeledDuration label="执行" ms={exec!} title="测试用例在本机执行耗时" />
           {totalEnd != null && (
             <>
               <span className="text-border/70" aria-hidden>
