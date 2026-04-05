@@ -63,9 +63,20 @@ function escapeHtml(s: string): string {
     .replace(/"/g, '&quot;')
 }
 
+/** ECMAScript LineTerminator (comments / strings differ from template literals). */
+function isEcmaLineTerminatorAt(source: string, j: number): boolean {
+  const x = source[j]
+  if (x === '\n' || x === '\r' || x === '\u2028' || x === '\u2029') return true
+  return false
+}
+
+/**
+ * web-tree-sitter exposes `node.startIndex` / `node.endIndex` as UTF-16 code-unit indices
+ * (verified: `getText` uses `source.slice(startIndex)` which is a JS string operation).
+ * Map captures onto a code-unit array and merge runs of same highlight class into `<span>`s.
+ */
 function capturesToHtml(source: string, captures: QueryCapture[]): string {
-  const bytes = new TextEncoder().encode(source)
-  const len = bytes.length
+  const len = source.length
   if (len === 0) return ''
 
   const bestPri = new Int16Array(len).fill(-1)
@@ -76,28 +87,41 @@ function capturesToHtml(source: string, captures: QueryCapture[]): string {
     const p = CAPTURE_PRIORITY[name] ?? 5
     const start = cap.node.startIndex
     const end = cap.node.endIndex
-    for (let b = start; b < end && b < len; b++) {
-      if (p >= bestPri[b]) {
-        bestPri[b] = p
-        bestName[b] = name
+    for (let i = start; i < end && i < len; i++) {
+      if (p >= bestPri[i]) {
+        bestPri[i] = p
+        bestName[i] = name
       }
     }
   }
 
   const parts: string[] = []
-  let i = 0
-  while (i < len) {
-    const name = bestName[i]
-    let j = i + 1
-    while (j < len && bestName[j] === name) j++
-    const chunk = new TextDecoder('utf-8').decode(bytes.subarray(i, j))
-    const esc = escapeHtml(chunk)
-    if (name) {
-      const style = CAPTURE_STYLE[name] ?? CAPTURE_STYLE.variable
-      parts.push(`<span class="${captureToClass(name)}" style="${style}">${esc}</span>`)
-    } else parts.push(esc)
-    i = j
+  let buf = ''
+  let activeName: string | null | undefined
+
+  const flush = () => {
+    if (!buf) return
+    const esc = escapeHtml(buf)
+    if (activeName) {
+      const style = CAPTURE_STYLE[activeName] ?? CAPTURE_STYLE.variable
+      parts.push(`<span class="${captureToClass(activeName)}" style="${style}">${esc}</span>`)
+    } else {
+      parts.push(esc)
+    }
+    buf = ''
   }
+
+  for (let i = 0; i < len; i++) {
+    const name = bestName[i]
+    if (activeName === undefined) {
+      activeName = name
+    } else if (name !== activeName) {
+      flush()
+      activeName = name
+    }
+    buf += source[i]
+  }
+  flush()
   return parts.join('')
 }
 
@@ -178,7 +202,7 @@ export function highlightJavaScriptRegexHtml(source: string): string {
 
     if (c === '/' && source[i + 1] === '/') {
       let j = i + 2
-      while (j < n && source[j] !== '\n') j++
+      while (j < n && !isEcmaLineTerminatorAt(source, j)) j++
       span('comment', source.slice(i, j))
       i = j
       continue
@@ -197,6 +221,7 @@ export function highlightJavaScriptRegexHtml(source: string): string {
       let j = i + 1
       while (j < n) {
         const x = source[j]!
+        if (isEcmaLineTerminatorAt(source, j)) break
         if (x === '\\') {
           j += 2
           continue
@@ -216,6 +241,7 @@ export function highlightJavaScriptRegexHtml(source: string): string {
       let j = i + 1
       while (j < n) {
         const x = source[j]!
+        if (isEcmaLineTerminatorAt(source, j)) break
         if (x === '\\') {
           j += 2
           continue
