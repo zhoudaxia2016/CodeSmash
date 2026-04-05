@@ -2,7 +2,8 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'path'
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
+  base: mode === 'production' ? '/codesmesh/' : '/',
   plugins: [react()],
   assetsInclude: ['**/*.wasm'],
   optimizeDeps: {
@@ -39,4 +40,4 @@ export default defineConfig({
       },
     },
   },
-})
+}))
