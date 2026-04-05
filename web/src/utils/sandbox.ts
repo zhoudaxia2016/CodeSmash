@@ -59,6 +59,35 @@ function expectedComparable(ans: unknown): string {
   return actualToComparable(ans)
 }
 
+/** verify 分支：从 run.js 返回的 JSON 载荷解析 flag（1/0/nonbool:…）与选手输出展示串 */
+function parseVerifyRunPayload(raw: unknown): { flag: string; cand: string } | null {
+  let text = String(raw ?? '').trim()
+  if (!text) return null
+  const tryParse = (t: string): { flag: string; cand: string } | null => {
+    try {
+      const o = JSON.parse(t) as unknown
+      if (o && typeof o === 'object' && 'f' in o && 'c' in o) {
+        return {
+          flag: String((o as { f: unknown }).f),
+          cand: String((o as { c: unknown }).c),
+        }
+      }
+    } catch {
+      return null
+    }
+    return null
+  }
+  const direct = tryParse(text)
+  if (direct) return direct
+  try {
+    const inner = JSON.parse(text)
+    if (typeof inner === 'string') return tryParse(inner)
+  } catch {
+    /* ignore */
+  }
+  return null
+}
+
 async function evalUserCase(
   QuickJS: QuickJSWASMModule,
   code: string,
@@ -133,7 +162,9 @@ async function evalUserCase(
   const __args = ${dataJson};
   const __cand = ${entryPoint}.apply(null, __args);
   const __ok = verify.apply(null, __args.concat([__cand]));
-  return __ok === true ? '1' : __ok === false ? '0' : 'nonbool:' + String(__ok);
+  const __candStr = typeof __cand === 'object' && __cand !== null ? JSON.stringify(__cand) : String(__cand).trim();
+  const __flag = __ok === true ? '1' : __ok === false ? '0' : 'nonbool:' + String(__ok);
+  return JSON.stringify({ f: __flag, c: __candStr });
 })()`
 
       const call = vm.evalCode(callScript, 'run.js', { type: 'global' })
@@ -157,9 +188,12 @@ async function evalUserCase(
 
       const raw = call.value !== undefined ? vm.dump(call.value) : ''
       disposeEvalResult(call)
-      const flag = String(raw).trim()
+      const payload = parseVerifyRunPayload(raw)
+      const flag = payload?.flag ?? String(raw).trim()
       const passed = flag === '1'
-      const actualOutput = passed ? 'true' : flag === '0' ? 'false' : flag
+      const actualOutput =
+        payload?.cand ??
+        (passed ? 'true' : flag === '0' ? 'false' : flag)
 
       return {
         testCaseId: testCase.id,
