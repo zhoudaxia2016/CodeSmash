@@ -22,9 +22,10 @@ alwaysApply: true
 
 ### `components/` 与逻辑复用
 
-- **`components/<name>/index.ts` 只导出对外主组件**（及该组件的 props 类型若需要）。**不要**从 `components` 桶文件再导出工具函数。
-- 可复用的纯函数、数据结构解析等放在 **`web/src/utils/`**， 按领域命名（如 `test-case-rows.ts`），避免以单一动词/功能命名的过长文件名（如 `parse-test-case-rows.ts`）。
+- **功能目录名**用领域/动作（如 `create-problem`），**不要**绑定具体实现形态（如 `create-problem-form`）。
+- **入口必须是 `index.tsx`**：主组件定义写在 `components/<feature>/index.tsx`，**不要**用 `index.ts` 只做 re-export 桶。
+- 同目录下可并列子模块（如 `problem-authoring-assist-panel.tsx`）。**不要**从 `components` 再导出 `utils` 等纯函数；纯函数放在 **`web/src/utils/`**，按领域命名（如 `test-case-rows.ts`），避免以单一动词堆叠的长文件名（如 `parse-test-case-rows.ts`）。
 
 ### 大模型 / 接口编排
 
-- 调用命题辅助、mutation 等与 **BYOK API** 相关的编排放在 **`hooks/`**（如 `useProblemAuthoringAssist`）；表单旁只放小块 **展示组件**（如 `problem-authoring-assist-panel.tsx`），由容器或页面组合。
+- 调用命题辅助、mutation 等与 **BYOK API** 相关的编排放在 **`hooks/`**（如 `useProblemAuthoringAssist`）；表单旁只放小块 **展示组件**（如 `create-problem/problem-authoring-assist-panel.tsx`），由 `index.tsx` 或页面组合。

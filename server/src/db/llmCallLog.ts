@@ -6,6 +6,7 @@ export type LlmCallSource =
   | 'llm_try_analysis'
   | 'llm_try_code'
   | 'test_case_generate'
+  | 'problem_authoring'
   | 'other'
 
 export type LlmCallLogRow = {

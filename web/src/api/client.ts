@@ -4,8 +4,15 @@ const API_BASE = '/api'
 
 async function handleResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
-    const error = await response.json().catch(() => ({ message: 'Unknown error' }))
-    throw new Error(error.message || `HTTP ${response.status}`)
+    const error = (await response.json().catch(() => ({}))) as {
+      message?: string
+      error?: string
+    }
+    const msg =
+      (typeof error.message === 'string' && error.message) ||
+      (typeof error.error === 'string' && error.error) ||
+      `HTTP ${response.status}`
+    throw new Error(msg)
   }
   return response.json()
 }
@@ -29,11 +36,34 @@ export const api = {
     return handleResponse(res)
   },
 
-  async createProblem(data: Omit<import('../types').Problem, 'id' | 'createdAt' | 'updatedAt'>): Promise<import('../types').Problem> {
+  async createProblem(
+    data: Omit<import('../types').Problem, 'id' | 'createdAt' | 'updatedAt'> & {
+      testCases?: Array<{
+        data: unknown[]
+        ans?: unknown
+      }>
+    },
+  ): Promise<{ problem: import('../types').Problem; testCases: import('../types').TestCase[] }> {
     const res = await fetch(`${API_BASE}/problems`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
+    })
+    return handleResponse(res)
+  },
+
+  async suggestProblemAuthoring(body: {
+    title?: string
+    description?: string
+    functionSignature?: string
+    testCasesData?: unknown[][]
+    tags?: string[]
+    modelId?: string
+  }): Promise<import('../types').ProblemAuthoringResponse> {
+    const res = await fetch(`${API_BASE}/problems/authoring`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
     })
     return handleResponse(res)
   },

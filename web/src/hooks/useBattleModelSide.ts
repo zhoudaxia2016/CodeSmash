@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { prepareRunnableJavaScript } from '@/lib/stripCodeFences'
 import { api } from '@/api/client'
-import type { ModelResult, TestCase, TestResult } from '@/types'
+import type { ModelResult, ProblemGradingContext, TestCase, TestResult } from '@/types'
 import { useSandbox } from '@/utils/sandbox'
 
 export function officialMetrics(r: ModelResult) {
@@ -48,6 +48,7 @@ export type UseBattleModelSideArgs = {
   result: ModelResult
   testCases: TestCase[]
   testsReady: boolean
+  grading: ProblemGradingContext
   submitOfficialToServer?: boolean
 }
 
@@ -57,6 +58,7 @@ export function useBattleModelSide({
   result,
   testCases,
   testsReady,
+  grading,
   submitOfficialToServer = true,
 }: UseBattleModelSideArgs) {
   const queryClient = useQueryClient()
@@ -76,7 +78,7 @@ export function useBattleModelSide({
   const { passed, total } = officialMetrics(displayResult)
   const ok = displayResult.status === 'completed' && displayResult.phase === 'completed'
   const failedLlm = result.status === 'failed' || result.phase === 'failed'
-  const enabledCaseCount = testCases.filter((c) => c.enabled).length
+  const testCaseCount = testCases.length
   const runningOfficial = localPhase === 'running_tests'
   const showOfficialSection =
     !failedLlm && !runningOfficial && displayResult.officialResult != null
@@ -90,11 +92,10 @@ export function useBattleModelSide({
     ranRef.current = true
 
     const code = prepareRunnableJavaScript(result.code ?? '')
-    const enabled = testCases.filter((c) => c.enabled)
-    if (!code || enabled.length === 0) {
+    if (!code || testCases.length === 0) {
       const emptyOfficial = {
         passed: 0,
-        total: enabled.length,
+        total: testCases.length,
         timeMs: 0,
         details: [] as TestResult[],
       }
@@ -117,13 +118,13 @@ export function useBattleModelSide({
     }
 
     setLocalPhase('running_tests')
-    setRunProgress({ done: 0, total: enabled.length })
+    setRunProgress({ done: 0, total: testCases.length })
 
     let cancelled = false
     void (async () => {
       let details: TestResult[]
       try {
-        details = await runCodeWithProgress(code, testCases, (done, tot) => {
+        details = await runCodeWithProgress(code, testCases, grading, (done, tot) => {
           if (!cancelled) setRunProgress({ done, total: tot })
         })
       } catch (e: unknown) {
@@ -169,6 +170,7 @@ export function useBattleModelSide({
     submitOfficialToServer,
     testCases,
     testsReady,
+    grading,
   ])
 
   const phase = displayResult.phase ?? 'pending'
@@ -210,8 +212,9 @@ export function useBattleModelSide({
     showCode,
     showCodePhase,
     showOfficialPhase,
-    enabledCaseCount,
+    testCaseCount,
     testsReady,
     submitOfficialToServer,
+    entryPoint: grading.entryPoint,
   }
 }

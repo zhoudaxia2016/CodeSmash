@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import { prepareRunnableJavaScript, streamProblemAnalysis, streamProblemCode } from '../lib/llm.ts'
 import { sanitizeModelThoughtMarkdown, splitThinkingFromModelCode } from '../lib/codePhaseSplit.ts'
-import { problems } from './problems.ts'
+import { loadProblemForBattle } from './problems.ts'
 
 const battlesRouter = new Hono()
 
@@ -92,11 +92,13 @@ function emptyResult(modelId: string): BattleResult {
   }
 }
 
+type BattleProblem = NonNullable<Awaited<ReturnType<typeof loadProblemForBattle>>>
+
 async function runSide(
   battleId: string,
   battle: Battle,
   side: 'A' | 'B',
-  problem: typeof problems[0],
+  problem: BattleProblem,
   modelId: string,
   provider: ReturnType<typeof getModelProvider>,
 ) {
@@ -181,7 +183,7 @@ async function runSide(
   }
 }
 
-async function runBattle(battleId: string, battle: Battle, problem: typeof problems[0]) {
+async function runBattle(battleId: string, battle: Battle, problem: BattleProblem) {
   battle.status = 'running'
   activeBattles.set(battleId, battle)
 
@@ -229,7 +231,7 @@ battlesRouter.post('/', async (c) => {
     return c.json({ error: 'Must select two different models' }, 400)
   }
 
-  const problem = problems.find((p) => p.id === problemId)
+  const problem = await loadProblemForBattle(problemId)
   if (!problem) {
     return c.json({ error: 'Problem not found' }, 404)
   }

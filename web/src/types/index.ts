@@ -6,14 +6,17 @@ export interface PlatformModel {
   enabled: boolean
 }
 
+export type GradingMode = 'expected' | 'verify'
+
 export interface Problem {
   id: string
   title: string
   description: string
-  difficulty?: 'easy' | 'medium' | 'hard'
   tags?: string[]
   entryPoint: string
   functionSignature: string
+  gradingMode: GradingMode
+  verifySource?: string | null
   referenceNote?: string
   createdAt: string
   updatedAt: string
@@ -22,10 +25,14 @@ export interface Problem {
 export interface TestCase {
   id: string
   problemId: string
+  /** Arguments passed as `entryPoint.apply(null, data)`. */
+  data: unknown[]
+  /** Expected value when `gradingMode === 'expected'`. */
+  ans?: unknown
+  /** Derived display string (JSON of `data`). */
   input: string
+  /** Derived display string for expected mode. */
   expectedOutput: string
-  enabled: boolean
-  source: 'manual' | 'generated'
 }
 
 export type ModelPhase =
@@ -104,4 +111,17 @@ export interface RateLimitInfo {
   remaining: number
   limit: number
   resetAt: string
+}
+
+/** Browser-side grading context for QuickJS (from GET /problems/:id). */
+export type ProblemGradingContext = Pick<Problem, 'entryPoint' | 'gradingMode' | 'verifySource'>
+
+export type ProblemAuthoringResponse = {
+  title?: string
+  functionSignature?: string
+  entryPoint: string
+  gradingMode: GradingMode
+  testCases: Array<{ data: unknown[]; ans?: unknown }>
+  verifySource?: string | null
+  reasoning?: string
 }

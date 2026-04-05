@@ -18,9 +18,10 @@ export function OfficialCell({ hook }: { hook: ModelSideHook }) {
     passed,
     total,
     runningOfficial,
-    enabledCaseCount,
+    testCaseCount,
     testsReady,
     submitOfficialToServer,
+    entryPoint,
   } = hook
 
   const modelTimingVisible =
@@ -47,18 +48,18 @@ export function OfficialCell({ hook }: { hook: ModelSideHook }) {
             displayResult.phase === 'awaiting_execution' &&
             !failedLlm &&
             testsReady &&
-            enabledCaseCount > 0 && (
+            testCaseCount > 0 && (
               <p className="text-sm text-muted-foreground px-2">
-                即将在本机依次运行 {enabledCaseCount} 条测试用例…
+                即将在本机依次运行 {testCaseCount} 条测试用例…
               </p>
             )}
           {localPhase === 'idle' &&
             displayResult.phase === 'awaiting_execution' &&
             !failedLlm &&
             testsReady &&
-            enabledCaseCount === 0 && (
+            testCaseCount === 0 && (
               <p className="text-sm text-amber-700 dark:text-amber-400 px-2">
-                当前题目没有启用的测试用例，无法评测。
+                当前题目没有测试用例，无法评测。
               </p>
             )}
           {failedLlm && (
@@ -110,7 +111,7 @@ export function OfficialCell({ hook }: { hook: ModelSideHook }) {
               {displayResult.officialResult &&
                 displayResult.officialResult.total === 0 &&
                 displayResult.phase === 'completed' && (
-                  <p className="text-xs text-muted-foreground">没有启用的测试用例，未执行评测。</p>
+                  <p className="text-xs text-muted-foreground">没有测试用例，未执行评测。</p>
                 )}
               {displayResult.officialResult &&
                 displayResult.officialResult.total > 0 &&
@@ -154,7 +155,7 @@ export function OfficialCell({ hook }: { hook: ModelSideHook }) {
                             </td>
                             <td className="px-2 py-1.5 align-middle">
                               <CopyVerifySnippetButton
-                                text={buildVerifySnippet(codeBody, row.input, row.expectedOutput)}
+                                text={buildVerifySnippet(codeBody, row.input, entryPoint, row.expectedOutput)}
                                 disabled={!codeBody.trim()}
                                 label="复制"
                               />

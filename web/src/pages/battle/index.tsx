@@ -3,8 +3,9 @@ import { createPortal } from 'react-dom'
 import { ChevronDown, X } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useProblem, useStartBattle, useBattle } from '@/hooks/useApi'
-import type { PlatformModel, Problem, TestCase } from '@/types'
+import type { PlatformModel, Problem, ProblemGradingContext, TestCase } from '@/types'
 import { Result } from './result'
+import { NewProblem } from './new-problem'
 import { CodeBlock } from '@/components/code-block'
 import { Button } from '@/components/ui/button'
 import {
@@ -26,6 +27,7 @@ export function Battle({ models, problems }: { models: PlatformModel[]; problems
   const [modelA, setModelA] = useState('')
   const [modelB, setModelB] = useState('')
   const [battleId, setBattleId] = useState<string | null>(null)
+  const [newProblemOpen, setNewProblemOpen] = useState(false)
   const { mutate: startBattle, isPending: battleStarting } = useStartBattle()
   const { data: battle, isLoading: battleLoading, isError: battleError } = useBattle(battleId || '')
   const {
@@ -42,6 +44,18 @@ export function Battle({ models, problems }: { models: PlatformModel[]; problems
   }, [problemForBattleQuery.isSuccess, problemForBattleQuery.data?.testCases, selectedProblem])
   /** 仅 API 成功后才用题目用例；失败或无数据时不兜底 mock */
   const battleTestsReady = !!selectedProblem && problemForBattleQuery.isSuccess
+
+  const gradingContext = useMemo((): ProblemGradingContext => {
+    const p = problemForBattleQuery.data?.problem ?? problems.find((x) => x.id === selectedProblem)
+    if (!p) {
+      return { entryPoint: 'main', gradingMode: 'expected', verifySource: null }
+    }
+    return {
+      entryPoint: p.entryPoint,
+      gradingMode: p.gradingMode ?? 'expected',
+      verifySource: p.verifySource ?? null,
+    }
+  }, [problemForBattleQuery.data?.problem, problems, selectedProblem])
 
   const selectedProblemRow = problems.find((p) => p.id === selectedProblem)
   const problemDetailTestCases: TestCase[] = problemDetail?.testCases ?? []
@@ -187,6 +201,17 @@ export function Battle({ models, problems }: { models: PlatformModel[]; problems
           aria-hidden
         />
       </Button>
+      <Button
+        type="button"
+        variant="secondary"
+        size="sm"
+        className="shrink-0"
+        disabled={models.length === 0}
+        title={models.length === 0 ? '需至少一个可用模型以使用命题辅助' : undefined}
+        onClick={() => setNewProblemOpen(true)}
+      >
+        新建题目
+      </Button>
       </div>
       <Button
         type="button"
@@ -214,6 +239,19 @@ export function Battle({ models, problems }: { models: PlatformModel[]; problems
         modelBName={modelBName}
         runTestCases={runTestCases}
         battleTestsReady={battleTestsReady}
+        grading={gradingContext}
+      />
+
+      <NewProblem
+        open={newProblemOpen}
+        onOpenChange={setNewProblemOpen}
+        models={models}
+        defaultModelId={modelA || models[0]?.id || ''}
+        onCreated={(id) => {
+          setSelectedProblem(id)
+          void queryClient.invalidateQueries({ queryKey: ['problems'] })
+          void queryClient.invalidateQueries({ queryKey: ['problems', id] })
+        }}
       />
 
       {problemDetailOpen &&
@@ -256,11 +294,6 @@ export function Battle({ models, problems }: { models: PlatformModel[]; problems
                   <div>
                     <div className="mb-1 flex flex-wrap items-center gap-2">
                       <span className="font-semibold text-foreground">{selectedProblemRow.title}</span>
-                      {selectedProblemRow.difficulty && (
-                        <span className="rounded-md bg-secondary px-1.5 py-0.5 text-[11px] font-medium uppercase tracking-wide text-secondary-foreground">
-                          {selectedProblemRow.difficulty}
-                        </span>
-                      )}
                       {selectedProblemRow.tags?.map((tag) => (
                         <span
                           key={tag}
@@ -278,7 +311,13 @@ export function Battle({ models, problems }: { models: PlatformModel[]; problems
                   <div className="mt-6">
                     <p className="mb-1 text-xs font-medium text-muted-foreground">入口与签名</p>
                     <p className="text-xs text-muted-foreground">
-                      函数名：
+                      判题：
+                      <span className="ml-1 font-mono text-foreground">
+                        {selectedProblemRow.gradingMode === 'verify' ? '自定义 verify' : '标准答案'}
+                      </span>
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      入口{' '}
                       <code className="rounded bg-muted px-1 py-0.5 font-mono">
                         {selectedProblemRow.entryPoint}
                       </code>
@@ -287,6 +326,16 @@ export function Battle({ models, problems }: { models: PlatformModel[]; problems
                       code={selectedProblemRow.functionSignature}
                       className="m-0 mt-2 overflow-x-auto rounded-md border border-border bg-muted/50 p-3 font-mono text-xs leading-relaxed text-foreground whitespace-pre"
                     />
+                    {problemDetail?.problem?.gradingMode === 'verify' &&
+                      problemDetail.problem.verifySource?.trim() && (
+                        <div className="mt-3">
+                          <p className="mb-1 text-xs font-medium text-muted-foreground">verify 源码</p>
+                          <CodeBlock
+                            code={problemDetail.problem.verifySource.trim()}
+                            className="m-0 overflow-x-auto rounded-md border border-border bg-muted/50 p-3 font-mono text-xs leading-relaxed text-foreground whitespace-pre"
+                          />
+                        </div>
+                      )}
                   </div>
 
                   <div className="mt-6">
@@ -309,8 +358,8 @@ export function Battle({ models, problems }: { models: PlatformModel[]; problems
                           <thead className="border-b border-border bg-muted/50 font-medium text-muted-foreground">
                             <tr>
                               <th className="w-10 px-3 py-2">#</th>
-                              <th className="px-3 py-2">输入（main 参数）</th>
-                              <th className="px-3 py-2">期望输出</th>
+                              <th className="px-3 py-2">参数 data（JSON）</th>
+                              <th className="px-3 py-2">期望 / 判题</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-border">
