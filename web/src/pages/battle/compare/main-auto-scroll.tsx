@@ -12,7 +12,7 @@ type Props = {
   runDoneB?: number
 }
 
-/** 对战内容变高时滚动外层 <main>；force 为流式对战时强制粘底（官方用例重跑不 force） */
+/** 对战内容变高时滚动外层 <main>；流式对战默认粘底，用户离开底部后不再自动滚；非流式仅当已在底部时跟随增高 */
 export function MainAutoScroll({
   battleId,
   force,
@@ -23,16 +23,15 @@ export function MainAutoScroll({
   runDoneA,
   runDoneB,
 }: Props) {
-  /** 默认不粘底：刷新/进入页时留在顶部；用户滚到底部后才随内容增高跟随 */
   const stickRef = useRef(false)
   useLayoutEffect(() => {
-    stickRef.current = false
-  }, [battleId])
+    stickRef.current = force
+  }, [battleId, force])
 
   useLayoutEffect(() => {
     const main = document.querySelector('main')
     if (!main) return
-    if (force || stickRef.current) {
+    if (stickRef.current) {
       main.scrollTop = main.scrollHeight
     }
   }, [force, battleId, thoughtA, codeA, thoughtB, codeB, runDoneA, runDoneB])
@@ -41,14 +40,13 @@ export function MainAutoScroll({
     const main = document.querySelector('main')
     if (!main) return
     const onScroll = () => {
-      if (force) return
       const d = main.scrollHeight - main.scrollTop - main.clientHeight
       stickRef.current = d <= MAIN_STICK_NEAR_PX
     }
     main.addEventListener('scroll', onScroll, { passive: true })
     onScroll()
     return () => main.removeEventListener('scroll', onScroll)
-  }, [force])
+  }, [])
 
   return null
 }
