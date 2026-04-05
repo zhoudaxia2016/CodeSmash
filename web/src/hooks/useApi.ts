@@ -56,7 +56,10 @@ export function useUpdateProblem() {
   return useMutation({
     mutationFn: ({ id, data }: { id: string; data: Parameters<typeof api.updateProblem>[1] }) =>
       api.updateProblem(id, data),
-    onSuccess: (_, { id }) => queryClient.invalidateQueries({ queryKey: ['problems', id] }),
+    onSuccess: (_, { id }) => {
+      void queryClient.invalidateQueries({ queryKey: ['problems', id] })
+      void queryClient.invalidateQueries({ queryKey: ['problems'] })
+    },
   })
 }
 
@@ -81,7 +84,10 @@ export function useCreateTestCase() {
   return useMutation({
     mutationFn: ({ problemId, data }: { problemId: string; data: Parameters<typeof api.createTestCase>[1] }) =>
       api.createTestCase(problemId, data),
-    onSuccess: (_, { problemId }) => queryClient.invalidateQueries({ queryKey: ['problems', problemId] }),
+    onSuccess: (_, { problemId }) => {
+      void queryClient.invalidateQueries({ queryKey: ['problems', problemId] })
+      void queryClient.invalidateQueries({ queryKey: ['problems'] })
+    },
   })
 }
 
@@ -90,7 +96,10 @@ export function useUpdateTestCase() {
   return useMutation({
     mutationFn: ({ problemId, testCaseId, data }: { problemId: string; testCaseId: string; data: Parameters<typeof api.updateTestCase>[2] }) =>
       api.updateTestCase(problemId, testCaseId, data),
-    onSuccess: (_, { problemId }) => queryClient.invalidateQueries({ queryKey: ['problems', problemId] }),
+    onSuccess: (_, { problemId }) => {
+      void queryClient.invalidateQueries({ queryKey: ['problems', problemId] })
+      void queryClient.invalidateQueries({ queryKey: ['problems'] })
+    },
   })
 }
 
@@ -99,7 +108,10 @@ export function useDeleteTestCase() {
   return useMutation({
     mutationFn: ({ problemId, testCaseId }: { problemId: string; testCaseId: string }) =>
       api.deleteTestCase(problemId, testCaseId),
-    onSuccess: (_, { problemId }) => queryClient.invalidateQueries({ queryKey: ['problems', problemId] }),
+    onSuccess: (_, { problemId }) => {
+      void queryClient.invalidateQueries({ queryKey: ['problems', problemId] })
+      void queryClient.invalidateQueries({ queryKey: ['problems'] })
+    },
   })
 }
 

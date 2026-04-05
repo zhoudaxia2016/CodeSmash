@@ -5,7 +5,7 @@ import { parseRowsToTestCases, type TestCaseRow } from '@/utils/test-case-rows'
 
 /**
  * 命题「大模型辅助」：调用 `/problems/authoring`，与具体表单 UI 解耦。
- * 配套 UI 可用 `components/create-problem/problem-authoring-assist-panel`；也可在其它页面自行接线。
+ * 配套 UI 见 `components/problem-editor/authoring-assist-panel`（由 `ProblemEditor` 组合）；也可在其它页面自行接线。
  */
 export function useProblemAuthoringAssist(defaultModelId: string) {
   const [authorModelId, setAuthorModelId] = useState(defaultModelId)
