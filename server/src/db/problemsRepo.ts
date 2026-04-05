@@ -111,6 +111,28 @@ export async function seedProblemsIfEmpty(client: Client): Promise<void> {
   console.log('[db] seeded default problems')
 }
 
+/** 代码里新增的官方用例 id 在旧库中不存在时补行（INSERT OR IGNORE），避免 PATCH 报 404。 */
+export async function ensureOfficialTestCasesPresent(client: Client): Promise<void> {
+  let inserted = 0
+  for (const [problemId, cases] of Object.entries(officialTestCasesByProblem)) {
+    const p = await getProblemById(client, problemId)
+    if (!p) continue
+    for (const tc of cases) {
+      const data = legacyInputToDataArray(tc.input)
+      const ans = legacyExpectedToAns(tc.expectedOutput)
+      const r = await client.execute({
+        sql: `INSERT OR IGNORE INTO problem_test_cases (id, problem_id, data_json, ans_json)
+              VALUES (?, ?, ?, ?)`,
+        args: [tc.id, problemId, JSON.stringify(data), JSON.stringify(ans)],
+      })
+      inserted += Number(r.rowsAffected ?? 0)
+    }
+  }
+  if (inserted > 0) {
+    console.log(`[db] inserted ${inserted} missing official test case(s)`)
+  }
+}
+
 function rowToProblem(r: Record<string, unknown>): ProblemRecord {
   return {
     id: String(r.id),

@@ -9,6 +9,7 @@ import {
   type LlmCallOutputJson,
   type LlmCallSource,
 } from '../db/llmCallLog.ts'
+import { coerceAuthoringExpectedAns } from './expectedAnsAlternatives.ts'
 import { tryExtractStructuredCodeString } from './modelStructuredParse.ts'
 import {
   mergeReasoningAndXmlCodingThought,
@@ -634,23 +635,48 @@ async function chatCompletionContent(
   }
 }
 
-const PROBLEM_AUTHORING_SYSTEM = `你是竞赛编程题库助手。用户可能只提供题目描述；也可能额外提供标题、函数签名、以及若干用例的输入 data（二维 JSON：每个用例是传给函数的参数数组）。
+function readProblemAuthoringExpectedAltsLimit(): number {
+  const raw = Deno.env.get('PROBLEM_AUTHORING_MAX_EXPECTED_ALTS')?.trim()
+  if (!raw) return 5
+  const n = parseInt(raw, 10)
+  if (!Number.isFinite(n) || n < 1) return 5
+  return Math.min(Math.floor(n), 100)
+}
 
-你的任务：
-- 若用户未给函数签名：根据题意设计一条合理的 JavaScript/TypeScript 风格函数声明（含参数名与类型注解），并令 entryPoint 与声明中的函数名一致。
-- 若用户未给用例 data 或为空：自行设计至少 3 条有代表性的测试输入（覆盖典型与边界），与签名参数顺序一致。
-- 若用户已给用例 data：在保持 data 内容不变的前提下补全判题信息；需要时可微调但优先尊重用户 data。
+const PROBLEM_AUTHORING_SYSTEM_BASE = `你是竞赛编程题库助手。用户消息里有一段 JSON，请生成题目草稿；回复必须且仅为一个可 JSON.parse 的对象（不要 Markdown）。
 
-判题规则：
-1) 仅当「每个用例有且仅有一个正确答案」且可用 JSON 结构化相等判定时，gradingMode 用 "expected"，每个用例给出 ans（与选手返回值类型一致）。
-2) 以下情况必须用 "verify"，并输出完整 verify 函数源码（JavaScript），不要用 expected 硬编码某一组 ans：多解或题面未保证唯一解；浮点容差；无序集合/顺序无关；输出为「任一合法解」类约束满足（如数独、填词、在规则下多种完成方式均可）。
-3) verify 约定：function verify(...args, candidate) { ... }，args 与 data 展开顺序一致，candidate 为选手返回值；返回 true 表示通过。
+补全：无签名则自拟一行 JS/TS 声明（entryPoint 与函数名一致）；无用例或 testCasesData 空则至少 3 条；已有用例则保持各条 data。
 
-输出：只输出一个可被 JSON.parse 解析的 JSON 对象，不要 Markdown、不要其它文字。键名必须包含：
-title（简短题目标题，若用户已有标题可沿用或略改）,
-functionSignature（完整一行函数声明，与 entryPoint 一致）,
-entryPoint, gradingMode, testCases, verifySource（verify 时为字符串否则 null）, reasoning。
-testCases 每项含 data 与 ans（expected 时 ans 必填）。字符串内换行用 \\n，双引号用 \\"，保证合法 JSON。`
+判题二选一，输出里 gradingMode 只能是字符串 "expected" 或 "verify"：
+- "expected"＝**对答案表**：每个用例在 ans 里给一个 JSON 数组，数组里每一项都是一种「判为正确」的选手返回值（与选手输出做 JSON 结构一致即算对）。只有一个正确答案就数组里一项，例如 [5] 或 [[0,3]]；多种合法输出就把它们都放进数组，例如 [1,2,3]。此模式下 verifySource 填 null。
+- "verify"＝**自定义检查**：不写死答案表，改写一段可在判题环境运行的 JavaScript：\`function verify(...args, candidate) { return true 或 false }\`，其中参数顺序与该用例的 data 一致，candidate 是选手提交函数的返回值；对了就 return true。整段源码放进 verifySource。
+
+输出字段：title, functionSignature, entryPoint, gradingMode, testCases, verifySource, reasoning。`
+
+const PROBLEM_AUTHORING_SYSTEM_ENFORCE_EXPECTED = `【本期】固定用「对答案表」：每条 testCases 填 ans，verifySource 为 null。`
+
+const PROBLEM_AUTHORING_SYSTEM_ENFORCE_VERIFY = `【本期】固定用「自定义检查」：写非空 verifySource（函数见上）。`
+
+function problemAuthoringSystemFreeChoice(expectedAlternativesBeforeVerify: number): string {
+  return `【判题自选】在「对答案表」与「自定义检查」中选一种，gradingMode 填 "expected" 或 "verify" 对应。若选对答案表：全体用例里「可接受结果个数」之和（每个 ans 数组有几项就计几，求和）大于 ${expectedAlternativesBeforeVerify} 时须改用自定义检查；浮点容差、无序结果、多解不好列表时也更宜用自定义检查。`
+}
+
+function buildProblemAuthoringSystemContent(input: {
+  assistGradingFromForm: boolean
+  formGradingMode: 'expected' | 'verify'
+  expectedAlternativesBeforeVerify: number
+}): string {
+  let suffix: string
+  if (input.assistGradingFromForm) {
+    suffix =
+      input.formGradingMode === 'verify'
+        ? PROBLEM_AUTHORING_SYSTEM_ENFORCE_VERIFY
+        : PROBLEM_AUTHORING_SYSTEM_ENFORCE_EXPECTED
+  } else {
+    suffix = problemAuthoringSystemFreeChoice(input.expectedAlternativesBeforeVerify)
+  }
+  return `${PROBLEM_AUTHORING_SYSTEM_BASE}\n\n${suffix}`
+}
 
 export type ProblemAuthoringParsed = {
   title?: string
@@ -803,25 +829,15 @@ function buildProblemAuthoringUserContent(input: {
   functionSignature?: string
   testCasesData: unknown[][]
   tags?: string[]
-  enforceFormGradingMode: boolean
-  formGradingMode: 'expected' | 'verify'
 }): string {
-  const userPayload: Record<string, unknown> = {
+  const userPayload = {
     title: input.title?.trim() ?? '',
     description: input.description?.trim() ?? '',
     functionSignature: input.functionSignature?.trim() ?? '',
     tags: input.tags ?? [],
     testCasesData: input.testCasesData,
   }
-  if (input.enforceFormGradingMode) {
-    userPayload.gradingModeRequired = input.formGradingMode
-    userPayload.authoringInstruction =
-      `强制要求：输出中的 gradingMode 必须为 "${input.formGradingMode}"，不得改为另一种。若为 "expected"，每条 testCases 须有 ans；若为 "verify"，verifySource 须为完整可执行的 verify 函数源码（非空字符串）。`
-  } else {
-    userPayload.authoringInstruction =
-      '勿使用本 JSON 中的任何字段预设判题方式；请仅根据题意与系统提示中的判题规则，自行在输出中选择 gradingMode（"expected" 或 "verify"）。'
-  }
-  return `请根据以下 JSON 生成命题助手输出（你的整段回复必须且仅为一个可被 JSON.parse 解析的对象，不要其它文字）：\n${JSON.stringify(userPayload)}`
+  return `请根据以下 JSON 生成输出（整段回复必须且仅为一个可被 JSON.parse 解析的对象）：\n${JSON.stringify(userPayload)}`
 }
 
 export async function generateProblemAuthoring(
@@ -833,30 +849,34 @@ export async function generateProblemAuthoring(
     functionSignature?: string
     testCasesData: unknown[][]
     tags?: string[]
-    /** 为 true 时命题辅助必须采用表单中的判题方式。 */
-    enforceFormGradingMode?: boolean
-    /** 与表单「判题」一致；未传时按 expected 处理。仅当 enforceFormGradingMode 为 true 时写入提示词并校验。 */
+    /** 为 true 时命题辅助与表单判题方式（formGradingMode）一致。 */
+    assistGradingFromForm?: boolean
+    /** 表单当前判题方式；assistGradingFromForm 为 true 时用于提示词与结果校正。 */
     formGradingMode?: 'expected' | 'verify'
   },
   options: StreamLlmOptions,
 ): Promise<ProblemAuthoringParsed> {
-  const enforceFormGradingMode = input.enforceFormGradingMode === true
+  const assistGradingFromForm = input.assistGradingFromForm === true
   const formGradingMode: 'expected' | 'verify' =
     input.formGradingMode === 'verify' ? 'verify' : 'expected'
+  const expectedAlternativesBeforeVerify = readProblemAuthoringExpectedAltsLimit()
+  const systemContent = buildProblemAuthoringSystemContent({
+    assistGradingFromForm,
+    formGradingMode,
+    expectedAlternativesBeforeVerify,
+  })
   const userContent = buildProblemAuthoringUserContent({
     title: input.title,
     description: input.description,
     functionSignature: input.functionSignature,
     testCasesData: input.testCasesData,
     tags: input.tags,
-    enforceFormGradingMode,
-    formGradingMode,
   })
   const raw = await chatCompletionContent(
     provider,
     platformModelId,
     [
-      { role: 'system', content: PROBLEM_AUTHORING_SYSTEM },
+      { role: 'system', content: systemContent },
       {
         role: 'user',
         content: userContent,
@@ -875,13 +895,13 @@ export async function generateProblemAuthoring(
   }
   const o = normalizeAuthoringKeys(parsedObj)
   const entryPoint = typeof o.entryPoint === 'string' ? o.entryPoint.trim() : ''
-  let gradingMode: 'expected' | 'verify' = o.gradingMode === 'verify' ? 'verify' : 'expected'
   if (!entryPoint) throw new Error('JSON 缺少 entryPoint')
 
-  if (enforceFormGradingMode && gradingMode !== formGradingMode) {
-    throw new Error(
-      `命题助手返回的判题方式为 ${gradingMode}，与所选 ${formGradingMode} 不一致。请重试，或取消「自动选择判题类型」后由模型自选。`,
-    )
+  let gradingMode: 'expected' | 'verify'
+  if (assistGradingFromForm) {
+    gradingMode = formGradingMode
+  } else {
+    gradingMode = o.gradingMode === 'verify' ? 'verify' : 'expected'
   }
 
   const titleOut =
@@ -922,15 +942,16 @@ export async function generateProblemAuthoring(
       if (testCases[i].ans === undefined) {
         throw new Error(`expected 模式下第 ${i + 1} 条用例缺少 ans`)
       }
+      testCases[i].ans = coerceAuthoringExpectedAns(testCases[i].ans)
     }
   }
 
   const verifySource =
     typeof o.verifySource === 'string' && o.verifySource.trim() ? o.verifySource.trim() : null
 
-  if (enforceFormGradingMode && gradingMode === 'verify' && !verifySource) {
+  if (assistGradingFromForm && gradingMode === 'verify' && !verifySource) {
     throw new Error(
-      'verify 模式下命题助手未返回有效的 verifySource。请重试或取消「自动选择判题类型」后由模型自选。',
+      'verify 模式下命题助手未返回有效的 verifySource。请重试，或取消勾选「辅助与表单判题一致」后由模型自选。',
     )
   }
 

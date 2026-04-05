@@ -71,8 +71,8 @@ problemsRouter.post('/authoring', async (c) => {
     description?: string
     tags?: string[]
     modelId?: string
-    /** 为 true 时命题辅助必须采用 formGradingMode。 */
-    enforceFormGradingMode?: boolean
+    /** 为 true 时命题辅助与表单判题方式（formGradingMode）一致。 */
+    assistGradingFromForm?: boolean
     formGradingMode?: 'expected' | 'verify'
   }
 
@@ -96,7 +96,7 @@ problemsRouter.post('/authoring', async (c) => {
   const provider = modelProviderFromModelId(modelId)
 
   try {
-    const enforceFormGradingMode = body.enforceFormGradingMode === true
+    const assistGradingFromForm = body.assistGradingFromForm === true
     const formGradingMode: 'expected' | 'verify' =
       body.formGradingMode === 'verify' ? 'verify' : 'expected'
 
@@ -110,7 +110,7 @@ problemsRouter.post('/authoring', async (c) => {
         testCasesData: testCasesData as unknown[][],
         tags: body.tags,
         formGradingMode,
-        enforceFormGradingMode,
+        assistGradingFromForm,
       },
       { source: 'problem_authoring', sourceId: null },
     )

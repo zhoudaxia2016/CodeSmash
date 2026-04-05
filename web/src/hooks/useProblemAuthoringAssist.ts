@@ -23,8 +23,8 @@ export function useProblemAuthoringAssist(defaultModelId: string) {
       tags: string[]
       testCaseRows: TestCaseRow[]
       gradingMode: GradingMode
-      /** 勾选「自动选择判题类型」时为 true：辅助必须采用表单中的判题方式。 */
-      enforceFormGradingMode: boolean
+      /** 勾选「辅助与表单判题一致」时为 true。 */
+      assistGradingFromForm: boolean
       setError: (msg: string | null) => void
       setLlmNote: (msg: string | null) => void
       onSuccess: (data: ProblemAuthoringResponse) => void
@@ -51,7 +51,7 @@ export function useProblemAuthoringAssist(defaultModelId: string) {
           tags: input.tags,
           modelId: authorModelId,
           formGradingMode: input.gradingMode,
-          enforceFormGradingMode: input.enforceFormGradingMode,
+          assistGradingFromForm: input.assistGradingFromForm,
         },
         {
           onSuccess: (data) => {

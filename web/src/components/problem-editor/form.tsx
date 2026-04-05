@@ -133,7 +133,7 @@ export function ProblemEditorForm({
   const [functionSignature, setFunctionSignature] = useState('')
   const [entryPoint, setEntryPoint] = useState('')
   const [gradingMode, setGradingMode] = useState<GradingMode>('expected')
-  const [enforceFormGradingInAssist, setEnforceFormGradingInAssist] = useState(false)
+  const [assistGradingFromForm, setAssistGradingFromForm] = useState(false)
   const [verifySource, setVerifySource] = useState('')
   const [rows, setRows] = useState<ProblemEditorRow[]>([])
   const [initialTc, setInitialTc] = useState<Map<string, { data: string; ans: string }>>(new Map())
@@ -161,7 +161,7 @@ export function ProblemEditorForm({
       setFunctionSignature('')
       setEntryPoint('')
       setGradingMode('expected')
-      setEnforceFormGradingInAssist(false)
+      setAssistGradingFromForm(false)
       setVerifySource('')
       setRows([])
       setInitialTc(new Map())
@@ -179,7 +179,7 @@ export function ProblemEditorForm({
     setFunctionSignature(p.functionSignature)
     setEntryPoint(p.entryPoint)
     setGradingMode(p.gradingMode ?? 'expected')
-    setEnforceFormGradingInAssist(false)
+    setAssistGradingFromForm(false)
     setVerifySource(p.verifySource?.trim() ?? '')
     setError(null)
     setLlmNote(null)
@@ -223,7 +223,7 @@ export function ProblemEditorForm({
       tags,
       testCaseRows: rowsToTestCaseRows(rows),
       gradingMode,
-      enforceFormGradingMode: enforceFormGradingInAssist,
+      assistGradingFromForm,
       setError,
       setLlmNote,
       onSuccess: (data) => {
@@ -252,7 +252,7 @@ export function ProblemEditorForm({
       tags,
       testCaseRows: rowsToTestCaseRows(rows),
       gradingMode,
-      enforceFormGradingMode: enforceFormGradingInAssist,
+      assistGradingFromForm,
       setError,
       setLlmNote,
       onSuccess: (data) => {
@@ -568,13 +568,17 @@ export function ProblemEditorForm({
                           {gradingMode === 'expected' && (
                             <label className="block space-y-1">
                               <span className="text-[11px] text-muted-foreground">
-                                标准答案（单行 JSON）
+                                标准答案（JSON 数组：每项为一条可接受返回值）
                               </span>
                               <textarea
                                 className="min-h-[2.5rem] w-full rounded-md border border-input bg-background px-2 py-1.5 font-mono text-xs text-foreground"
                                 value={r.ans}
                                 onChange={(e) => updateRow(r.key, { ans: e.target.value })}
-                                placeholder={mode === 'create' ? '例如 [0,1]' : undefined}
+                                placeholder={
+                                  mode === 'create'
+                                    ? '例如 [[0,1]] 单解；多解 [1,2] 或 [[0,3],[1,2]]'
+                                    : undefined
+                                }
                                 rows={2}
                               />
                             </label>
@@ -604,8 +608,8 @@ export function ProblemEditorForm({
               models={models}
               authorModelId={authorModelId}
               onAuthorModelIdChange={setAuthorModelId}
-              enforceFormGradingMode={enforceFormGradingInAssist}
-              onEnforceFormGradingModeChange={setEnforceFormGradingInAssist}
+              assistGradingFromForm={assistGradingFromForm}
+              onAssistGradingFromFormChange={setAssistGradingFromForm}
               onSuggest={mode === 'create' ? handleSuggestCreate : handleSuggestEdit}
               pending={suggestPending}
             />

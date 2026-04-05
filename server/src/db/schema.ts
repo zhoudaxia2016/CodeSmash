@@ -1,6 +1,7 @@
 import type { Client } from '@libsql/client'
+import { migrateExpectedAnsJsonValue } from '../lib/expectedAnsAlternatives.ts'
 import { getLibsqlClient } from './client.ts'
-import { seedProblemsIfEmpty } from './problemsRepo.ts'
+import { ensureOfficialTestCasesPresent, seedProblemsIfEmpty } from './problemsRepo.ts'
 
 /** Older DBs may still have difficulty; UGC 场景用 tags 表达即可（SQLite 3.35+）。 */
 async function migrateDropProblemDifficulty(client: Client): Promise<void> {
@@ -121,6 +122,46 @@ async function migrateStripTestCaseSourceAndSort(client: Client): Promise<void> 
       '[db] migration: strip test case source/sort_order failed (delete server/data/codesmash.db if stuck)',
       e,
     )
+  }
+}
+
+async function migrateExpectedAnsToAlternativesArray(client: Client): Promise<void> {
+  try {
+    const res = await client.execute({
+      sql: `SELECT tc.id, tc.ans_json
+            FROM problem_test_cases tc
+            INNER JOIN problems p ON p.id = tc.problem_id
+            WHERE p.grading_mode = 'expected'
+              AND tc.ans_json IS NOT NULL
+              AND TRIM(tc.ans_json) != ''`,
+      args: [],
+    })
+    let updated = 0
+    for (const row of res.rows) {
+      const id = String((row as Record<string, unknown>).id)
+      const raw = String((row as Record<string, unknown>).ans_json)
+      let parsed: unknown
+      try {
+        parsed = JSON.parse(raw) as unknown
+      } catch {
+        continue
+      }
+      const next = migrateExpectedAnsJsonValue(parsed)
+      const nextStr = JSON.stringify(next)
+      if (nextStr === raw) continue
+      await client.execute({
+        sql: 'UPDATE problem_test_cases SET ans_json = ? WHERE id = ?',
+        args: [nextStr, id],
+      })
+      updated++
+    }
+    if (updated > 0) {
+      console.log(
+        `[db] migration: normalized ${updated} expected-mode ans_json to alternatives array`,
+      )
+    }
+  } catch (e) {
+    console.warn('[db] migration: expected ans_json normalization failed', e)
   }
 }
 
@@ -250,6 +291,8 @@ export async function initDb(): Promise<void> {
   await migrateAddProblemsCreatedBy(client)
 
   await seedProblemsIfEmpty(client)
+  await ensureOfficialTestCasesPresent(client)
+  await migrateExpectedAnsToAlternativesArray(client)
 
   console.log('[db] schema ready')
 }

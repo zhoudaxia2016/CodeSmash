@@ -9,6 +9,7 @@ import {
   type QuickJSWASMModule,
 } from 'quickjs-emscripten'
 import type { ProblemGradingContext, TestCase, TestResult } from '../types'
+import { expectedAcceptedAlternatives } from './expected-ans-alternatives'
 
 const EXECUTION_TIMEOUT_MS = 5000
 
@@ -199,15 +200,22 @@ async function evalUserCase(
     const raw = call.value !== undefined ? vm.dump(call.value) : ''
     disposeEvalResult(call)
     const actualOutput = actualToComparable(raw)
-    const want =
-      testCase.ans !== undefined ? expectedComparable(testCase.ans) : expectedDisplay
+    let passed: boolean
+    if (testCase.ans !== undefined) {
+      const alts = expectedAcceptedAlternatives(testCase.ans)
+      passed =
+        alts.length > 0 &&
+        alts.some((v) => actualOutput === expectedComparable(v))
+    } else {
+      passed = actualOutput === expectedDisplay
+    }
 
     return {
       testCaseId: testCase.id,
       input: inputDisplay,
       expectedOutput: expectedDisplay,
       actualOutput,
-      passed: actualOutput === want,
+      passed,
       timeMs: performance.now() - startTime,
     }
   } catch (e: unknown) {

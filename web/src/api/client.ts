@@ -104,8 +104,8 @@ export const api = {
     modelId?: string
     /** 当前表单判题方式（与是否强制无关，便于服务端与调试）。 */
     formGradingMode?: import('../types').GradingMode
-    /** 为 true 时辅助输出必须采用 formGradingMode。 */
-    enforceFormGradingMode?: boolean
+    /** 为 true 时辅助与表单判题方式（formGradingMode）一致。 */
+    assistGradingFromForm?: boolean
   }): Promise<import('../types').ProblemAuthoringResponse> {
     const res = await apiFetch(`${API_BASE}/problems/authoring`, {
       method: 'POST',

@@ -6,9 +6,9 @@ type Props = {
   models: PlatformModel[]
   authorModelId: string
   onAuthorModelIdChange: (id: string) => void
-  /** 勾选后辅助输出必须采用表单中的判题方式（expected / verify）。 */
-  enforceFormGradingMode: boolean
-  onEnforceFormGradingModeChange: (value: boolean) => void
+  /** 勾选＝辅助采用表单「标准答案 / 验证函数」；不勾选＝由模型自选判题方式。 */
+  assistGradingFromForm: boolean
+  onAssistGradingFromFormChange: (value: boolean) => void
   onSuggest: () => void
   pending: boolean
 }
@@ -18,8 +18,8 @@ export function ProblemAuthoringAssistPanel({
   models,
   authorModelId,
   onAuthorModelIdChange,
-  enforceFormGradingMode,
-  onEnforceFormGradingModeChange,
+  assistGradingFromForm,
+  onAssistGradingFromFormChange,
   onSuggest,
   pending,
 }: Props) {
@@ -56,14 +56,14 @@ export function ProblemAuthoringAssistPanel({
         <input
           type="checkbox"
           className="mt-0.5 h-3.5 w-3.5 shrink-0 rounded border-input"
-          checked={enforceFormGradingMode}
-          onChange={(e) => onEnforceFormGradingModeChange(e.target.checked)}
+          checked={assistGradingFromForm}
+          onChange={(e) => onAssistGradingFromFormChange(e.target.checked)}
         />
         <span>
-          <span className="font-medium text-foreground/90">自动选择判题类型</span>
+          <span className="font-medium text-foreground/90">辅助与表单判题一致</span>
           <span className="text-muted-foreground">
             {' '}
-            — 勾选后辅助结果固定为上方「判题」中的 expected / verify；不勾选则由模型根据题意自选。
+            — 勾选后采用上方「标准答案 / 验证函数」；不勾选则由模型根据题意自选。
           </span>
         </span>
       </label>

@@ -37,7 +37,7 @@ export interface TestCase {
   problemId: string
   /** Arguments passed as `entryPoint.apply(null, data)`. */
   data: unknown[]
-  /** Expected value when `gradingMode === 'expected'`. */
+  /** When `gradingMode === 'expected'`: JSON array of acceptable return values. */
   ans?: unknown
   /** Derived display string (JSON of `data`). */
   input: string
