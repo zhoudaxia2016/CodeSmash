@@ -6,6 +6,7 @@ type Props = {
   onRowActivate: (id: string) => void
   onDelete: (p: Problem) => void
   deletePending?: boolean
+  showDelete?: boolean
 }
 
 function formatUpdatedAt(iso: string) {
@@ -22,7 +23,13 @@ function formatUpdatedAt(iso: string) {
   }
 }
 
-export function ProblemList({ items, onRowActivate, onDelete, deletePending }: Props) {
+export function ProblemList({
+  items,
+  onRowActivate,
+  onDelete,
+  deletePending,
+  showDelete = true,
+}: Props) {
   return (
     <div className="overflow-x-auto rounded-md border border-border">
       <table
@@ -52,12 +59,14 @@ export function ProblemList({ items, onRowActivate, onDelete, deletePending }: P
             >
               更新于
             </th>
-            <th
-              scope="col"
-              className="w-24 whitespace-nowrap px-3 py-2.5 text-right text-xs font-medium uppercase tracking-wide text-muted-foreground"
-            >
-              删除
-            </th>
+            {showDelete ? (
+              <th
+                scope="col"
+                className="w-24 whitespace-nowrap px-3 py-2.5 text-right text-xs font-medium uppercase tracking-wide text-muted-foreground"
+              >
+                删除
+              </th>
+            ) : null}
           </tr>
         </thead>
         <tbody>
@@ -105,22 +114,24 @@ export function ProblemList({ items, onRowActivate, onDelete, deletePending }: P
               <td className="whitespace-nowrap px-3 py-2.5 align-top text-xs text-muted-foreground">
                 {formatUpdatedAt(p.updatedAt)}
               </td>
-              <td className="whitespace-nowrap px-3 py-2.5 align-top text-right">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-8 text-muted-foreground hover:bg-muted hover:text-foreground"
-                  disabled={deletePending}
-                  aria-label={`删除「${p.title}」`}
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    onDelete(p)
-                  }}
-                >
-                  删除
-                </Button>
-              </td>
+              {showDelete ? (
+                <td className="whitespace-nowrap px-3 py-2.5 align-top text-right">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 text-muted-foreground hover:bg-muted hover:text-foreground"
+                    disabled={deletePending}
+                    aria-label={`删除「${p.title}」`}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      onDelete(p)
+                    }}
+                  >
+                    删除
+                  </Button>
+                </td>
+              ) : null}
             </tr>
           ))}
         </tbody>

@@ -12,6 +12,7 @@ export type ProblemRecord = {
   functionSignature: string
   gradingMode: GradingMode
   verifySource: string | null
+  createdBy: string | null
   createdAt: string
   updatedAt: string
 }
@@ -40,7 +41,7 @@ function legacyExpectedToAns(expectedOutput: string): unknown {
   }
 }
 
-const SEED_PROBLEMS: Omit<ProblemRecord, 'createdAt' | 'updatedAt'>[] = [
+const SEED_PROBLEMS: Omit<ProblemRecord, 'createdAt' | 'updatedAt' | 'createdBy'>[] = [
   {
     id: '1',
     title: '两数之和',
@@ -73,8 +74,8 @@ export async function seedProblemsIfEmpty(client: Client): Promise<void> {
     await client.execute({
       sql: `INSERT INTO problems (
         id, title, description, tags_json, entry_point, function_signature,
-        grading_mode, verify_source, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        grading_mode, verify_source, created_by, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       args: [
         p.id,
         p.title,
@@ -84,6 +85,7 @@ export async function seedProblemsIfEmpty(client: Client): Promise<void> {
         p.functionSignature,
         p.gradingMode,
         p.verifySource,
+        null,
         now,
         now,
       ],
@@ -119,6 +121,7 @@ function rowToProblem(r: Record<string, unknown>): ProblemRecord {
     functionSignature: String(r.function_signature),
     gradingMode: (r.grading_mode as GradingMode) || 'expected',
     verifySource: r.verify_source == null ? null : String(r.verify_source),
+    createdBy: r.created_by == null || r.created_by === '' ? null : String(r.created_by),
     createdAt: String(r.created_at),
     updatedAt: String(r.updated_at),
   }
@@ -181,6 +184,7 @@ export type CreateProblemInput = {
 export async function createProblem(
   client: Client,
   input: CreateProblemInput,
+  createdByUserId: string,
 ): Promise<{ problem: ProblemRecord; testCases: TestCaseRecord[] }> {
   const id = crypto.randomUUID()
   const now = new Date().toISOString()
@@ -192,8 +196,8 @@ export async function createProblem(
   await client.execute({
     sql: `INSERT INTO problems (
       id, title, description, tags_json, entry_point, function_signature,
-      grading_mode, verify_source, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      grading_mode, verify_source, created_by, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     args: [
       id,
       input.title,
@@ -203,6 +207,7 @@ export async function createProblem(
       input.functionSignature.trim(),
       gradingMode,
       verifySource,
+      createdByUserId,
       now,
       now,
     ],

@@ -1,6 +1,11 @@
-import type { RateLimitInfo } from '../types'
+import type { AuthUser, RateLimitInfo } from '../types'
 
-const API_BASE = '/api'
+const rawApiOrigin = import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, '') ?? ''
+const API_BASE = rawApiOrigin ? `${rawApiOrigin}/api` : '/api'
+
+function apiFetch(path: string, init?: RequestInit): Promise<Response> {
+  return fetch(path, { ...init, credentials: 'include' })
+}
 
 async function handleResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
@@ -18,13 +23,42 @@ async function handleResponse<T>(response: Response): Promise<T> {
 }
 
 export const api = {
+  async getMe(): Promise<{ user: AuthUser | null }> {
+    const res = await apiFetch(`${API_BASE}/auth/me`)
+    return handleResponse(res)
+  },
+
+  async logout(): Promise<void> {
+    const res = await apiFetch(`${API_BASE}/auth/logout`, { method: 'POST' })
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  },
+
+  async postBattleResult(battle: import('../types').BattleSession): Promise<{ ok: boolean; id: string }> {
+    const res = await apiFetch(`${API_BASE}/battle-results`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ battle }),
+    })
+    return handleResponse(res)
+  },
+
+  async getAdminModels(): Promise<{ message: string; items: unknown[] }> {
+    const res = await apiFetch(`${API_BASE}/admin/models`)
+    return handleResponse(res)
+  },
+
+  async getAdminLogs(): Promise<{ message: string; items: unknown[] }> {
+    const res = await apiFetch(`${API_BASE}/admin/logs`)
+    return handleResponse(res)
+  },
+
   async getModels(): Promise<{ models: import('../types').PlatformModel[] }> {
-    const res = await fetch(`${API_BASE}/models`)
+    const res = await apiFetch(`${API_BASE}/models`)
     return handleResponse(res)
   },
 
   async getProblems(): Promise<{ problems: import('../types').Problem[] }> {
-    const res = await fetch(`${API_BASE}/problems`)
+    const res = await apiFetch(`${API_BASE}/problems`)
     return handleResponse(res)
   },
 
@@ -32,7 +66,7 @@ export const api = {
     problem: import('../types').Problem
     testCases: import('../types').TestCase[]
   }> {
-    const res = await fetch(`${API_BASE}/problems/${id}`)
+    const res = await apiFetch(`${API_BASE}/problems/${id}`)
     return handleResponse(res)
   },
 
@@ -44,7 +78,7 @@ export const api = {
       }>
     },
   ): Promise<{ problem: import('../types').Problem; testCases: import('../types').TestCase[] }> {
-    const res = await fetch(`${API_BASE}/problems`, {
+    const res = await apiFetch(`${API_BASE}/problems`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
@@ -60,7 +94,7 @@ export const api = {
     tags?: string[]
     modelId?: string
   }): Promise<import('../types').ProblemAuthoringResponse> {
-    const res = await fetch(`${API_BASE}/problems/authoring`, {
+    const res = await apiFetch(`${API_BASE}/problems/authoring`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
@@ -69,7 +103,7 @@ export const api = {
   },
 
   async updateProblem(id: string, data: Partial<import('../types').Problem>): Promise<import('../types').Problem> {
-    const res = await fetch(`${API_BASE}/problems/${id}`, {
+    const res = await apiFetch(`${API_BASE}/problems/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
@@ -78,12 +112,12 @@ export const api = {
   },
 
   async deleteProblem(id: string): Promise<void> {
-    const res = await fetch(`${API_BASE}/problems/${id}`, { method: 'DELETE' })
+    const res = await apiFetch(`${API_BASE}/problems/${id}`, { method: 'DELETE' })
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
   },
 
   async createTestCase(problemId: string, data: Omit<import('../types').TestCase, 'id' | 'problemId'>): Promise<import('../types').TestCase> {
-    const res = await fetch(`${API_BASE}/problems/${problemId}/test-cases`, {
+    const res = await apiFetch(`${API_BASE}/problems/${problemId}/test-cases`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
@@ -92,12 +126,12 @@ export const api = {
   },
 
   async generateTestCases(problemId: string): Promise<{ testCases: import('../types').TestCase[] }> {
-    const res = await fetch(`${API_BASE}/problems/${problemId}/test-cases/generate`, { method: 'POST' })
+    const res = await apiFetch(`${API_BASE}/problems/${problemId}/test-cases/generate`, { method: 'POST' })
     return handleResponse(res)
   },
 
   async updateTestCase(problemId: string, testCaseId: string, data: Partial<import('../types').TestCase>): Promise<import('../types').TestCase> {
-    const res = await fetch(`${API_BASE}/problems/${problemId}/test-cases/${testCaseId}`, {
+    const res = await apiFetch(`${API_BASE}/problems/${problemId}/test-cases/${testCaseId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
@@ -106,12 +140,12 @@ export const api = {
   },
 
   async deleteTestCase(problemId: string, testCaseId: string): Promise<void> {
-    const res = await fetch(`${API_BASE}/problems/${problemId}/test-cases/${testCaseId}`, { method: 'DELETE' })
+    const res = await apiFetch(`${API_BASE}/problems/${problemId}/test-cases/${testCaseId}`, { method: 'DELETE' })
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
   },
 
   async startBattle(problemId: string, modelAId: string, modelBId: string): Promise<import('../types').BattleSession> {
-    const res = await fetch(`${API_BASE}/battles`, {
+    const res = await apiFetch(`${API_BASE}/battles`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ problemId, modelAId, modelBId }),
@@ -121,7 +155,7 @@ export const api = {
   },
 
   async getBattle(battleId: string): Promise<{ battle: import('../types').BattleSession }> {
-    const res = await fetch(`${API_BASE}/battles/${battleId}`)
+    const res = await apiFetch(`${API_BASE}/battles/${battleId}`)
     return handleResponse(res)
   },
 
@@ -137,7 +171,7 @@ export const api = {
       }
     },
   ): Promise<{ battle: import('../types').BattleSession }> {
-    const res = await fetch(`${API_BASE}/battles/${battleId}/official`, {
+    const res = await apiFetch(`${API_BASE}/battles/${battleId}/official`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
@@ -146,18 +180,18 @@ export const api = {
   },
 
   async pollBattle(battleId: string, intervalMs?: number): Promise<{ battle: import('../types').BattleSession }> {
-    const res = await fetch(`${API_BASE}/battles/${battleId}/poll?interval=${intervalMs || 1000}`)
+    const res = await apiFetch(`${API_BASE}/battles/${battleId}/poll?interval=${intervalMs || 1000}`)
     return handleResponse(res)
   },
 
   async getLeaderboard(problemId?: string): Promise<{ entries: import('../types').LeaderboardEntry[] }> {
     const url = problemId ? `${API_BASE}/leaderboard?problemId=${problemId}` : `${API_BASE}/leaderboard`
-    const res = await fetch(url)
+    const res = await apiFetch(url)
     return handleResponse(res)
   },
 
   async getRateLimit(): Promise<RateLimitInfo> {
-    const res = await fetch(`${API_BASE}/rate-limit`)
+    const res = await apiFetch(`${API_BASE}/rate-limit`)
     return handleResponse(res)
   },
 }

@@ -1,6 +1,10 @@
+import { useEffect, useState } from 'react'
+import { api } from '@/api/client'
+import { Button } from '@/components/ui/button'
+import type { AuthUser, BattleSession, ProblemGradingContext, TestCase } from '@/types'
+import { getLocalBattleEntry, markBattleSyncedLocal } from '@/utils/battle-local-history'
 import { Compare } from '../compare'
 import { buildMockBattle } from '../lib/mockBattle'
-import type { BattleSession, ProblemGradingContext, TestCase } from '@/types'
 
 type Props = {
   battle: BattleSession | null | undefined
@@ -14,6 +18,7 @@ type Props = {
   runTestCases: TestCase[]
   battleTestsReady: boolean
   grading: ProblemGradingContext
+  currentUser: AuthUser | null
 }
 
 export function Result({
@@ -28,7 +33,42 @@ export function Result({
   runTestCases,
   battleTestsReady,
   grading,
+  currentUser,
 }: Props) {
+  const [syncing, setSyncing] = useState(false)
+  const [syncErr, setSyncErr] = useState<string | null>(null)
+  const [cloudSynced, setCloudSynced] = useState(false)
+
+  useEffect(() => {
+    setCloudSynced(false)
+    setSyncErr(null)
+  }, [battleId])
+
+  const terminal =
+    battle != null && (battle.status === 'completed' || battle.status === 'failed')
+  const localEntry = battle && terminal ? getLocalBattleEntry(battle.id) : null
+  const alreadyOnCloud = cloudSynced || localEntry?.syncedAt != null
+  const canSyncToCloud =
+    !!currentUser &&
+    !!battle &&
+    terminal &&
+    localEntry != null &&
+    !alreadyOnCloud
+
+  const handleSync = async () => {
+    if (!battle || !currentUser) return
+    setSyncing(true)
+    setSyncErr(null)
+    try {
+      await api.postBattleResult(battle)
+      markBattleSyncedLocal(battle.id)
+      setCloudSynced(true)
+    } catch (e) {
+      setSyncErr(e instanceof Error ? e.message : '同步失败')
+    } finally {
+      setSyncing(false)
+    }
+  }
   if (starting && !battleId) {
     return (
       <section className="space-y-4">
@@ -74,9 +114,36 @@ export function Result({
   return (
     <section className="space-y-4">
       {fromServerBattle ? (
-        <div className="flex flex-wrap justify-end gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {terminal && (
+              <span className="text-xs text-muted-foreground">
+                对战结果已保存到本机浏览器
+                {currentUser && alreadyOnCloud ? ' · 已同步到云端' : ''}
+              </span>
+            )}
+            {canSyncToCloud && (
+              <>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  className="h-8"
+                  disabled={syncing}
+                  onClick={() => void handleSync()}
+                >
+                  {syncing ? '同步中…' : '同步到云端'}
+                </Button>
+                {syncErr ? (
+                  <span className="text-xs text-destructive" role="alert">
+                    {syncErr}
+                  </span>
+                ) : null}
+              </>
+            )}
+          </div>
           <span className="text-xs text-muted-foreground">
-            {battleStatusLabel[battle.status] ?? battle.status}
+            {battleStatusLabel[battle!.status] ?? battle!.status}
           </span>
         </div>
       ) : (

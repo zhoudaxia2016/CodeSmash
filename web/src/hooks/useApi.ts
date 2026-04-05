@@ -2,6 +2,15 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '../api/client'
 import { useAppStore } from '../stores/appStore'
 
+export function useMe() {
+  return useQuery({
+    queryKey: ['me'],
+    queryFn: () => api.getMe(),
+    staleTime: 30_000,
+    refetchOnWindowFocus: true,
+  })
+}
+
 export function useModels() {
   const setModels = useAppStore((s) => s.setModels)
   return useQuery({

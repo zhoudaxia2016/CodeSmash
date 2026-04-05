@@ -1,6 +1,10 @@
 import { Hono } from 'hono'
 import { initDb } from './db/schema.ts'
+import { corsAllowedFrontends } from './middleware/cors.ts'
 import { rateLimit } from './middleware/rateLimit.ts'
+import { adminRouter } from './routes/admin.ts'
+import { authRouter } from './routes/auth.ts'
+import { battleResultsRouter } from './routes/battleResults.ts'
 import { battlesRouter } from './routes/battles.ts'
 import { problemsRouter } from './routes/problems.ts'
 import { modelsRouter } from './routes/models.ts'
@@ -15,6 +19,11 @@ app.get('/', (c) => c.json({ status: 'ok', service: 'codesmesh-api' }))
 
 const api = new Hono()
 
+api.use('*', corsAllowedFrontends)
+
+api.route('/auth', authRouter)
+api.route('/admin', adminRouter)
+api.route('/battle-results', battleResultsRouter)
 api.route('/battles', battlesRouter)
 api.route('/problems', problemsRouter)
 api.route('/models', modelsRouter)

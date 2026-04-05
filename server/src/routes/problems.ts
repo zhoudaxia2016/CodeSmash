@@ -1,4 +1,5 @@
 import { Hono } from 'hono'
+import type { SessionUser } from '../db/userSessionsRepo.ts'
 import { getLibsqlClient } from '../db/client.ts'
 import {
   createProblem,
@@ -17,8 +18,9 @@ import {
 } from '../db/problemsRepo.ts'
 import { validateEntryPointAgainstSignature } from '../lib/entryPointValidation.ts'
 import { generateProblemAuthoring } from '../lib/llm.ts'
+import { getSessionUser, requireAuth } from '../middleware/requireAuth.ts'
 
-const problemsRouter = new Hono()
+const problemsRouter = new Hono<{ Variables: { user?: SessionUser } }>()
 
 function modelProviderFromModelId(modelId: string): 'minimax' | 'deepseek' {
   if (modelId.startsWith('minimax')) return 'minimax'
@@ -35,6 +37,7 @@ function problemToJson(p: ProblemRecord) {
     functionSignature: p.functionSignature,
     gradingMode: p.gradingMode,
     verifySource: p.verifySource,
+    createdBy: p.createdBy,
     createdAt: p.createdAt,
     updatedAt: p.updatedAt,
   }
@@ -128,7 +131,8 @@ problemsRouter.get('/:id', async (c) => {
   return c.json({ problem: problemToJson(problem), testCases })
 })
 
-problemsRouter.post('/', async (c) => {
+problemsRouter.post('/', requireAuth, async (c) => {
+  const user = getSessionUser(c)
   const body = await c.req.json() as CreateProblemInput
 
   if (!body.title?.trim() || !body.description?.trim()) {
@@ -158,11 +162,15 @@ problemsRouter.post('/', async (c) => {
 
   const client = getLibsqlClient()
   try {
-    const { problem, testCases } = await createProblem(client, {
-      ...body,
-      gradingMode,
-      verifySource: gradingMode === 'verify' ? body.verifySource : null,
-    })
+    const { problem, testCases } = await createProblem(
+      client,
+      {
+        ...body,
+        gradingMode,
+        verifySource: gradingMode === 'verify' ? body.verifySource : null,
+      },
+      user.id,
+    )
     return c.json({
       problem: problemToJson(problem),
       testCases: testCases.map((tc) => testCaseToJson(tc, problem.gradingMode)),
@@ -173,7 +181,7 @@ problemsRouter.post('/', async (c) => {
   }
 })
 
-problemsRouter.patch('/:id', async (c) => {
+problemsRouter.patch('/:id', requireAuth, async (c) => {
   const id = c.req.param('id')
   const patch = await c.req.json() as Partial<CreateProblemInput>
   const client = getLibsqlClient()
@@ -197,7 +205,7 @@ problemsRouter.patch('/:id', async (c) => {
   return c.json({ problem: problemToJson(updated) })
 })
 
-problemsRouter.delete('/:id', async (c) => {
+problemsRouter.delete('/:id', requireAuth, async (c) => {
   const id = c.req.param('id')
   const client = getLibsqlClient()
   const ok = await deleteProblem(client, id)
@@ -207,7 +215,7 @@ problemsRouter.delete('/:id', async (c) => {
   return c.json({ success: true })
 })
 
-problemsRouter.post('/:id/test-cases', async (c) => {
+problemsRouter.post('/:id/test-cases', requireAuth, async (c) => {
   const problemId = c.req.param('id')
   const body = await c.req.json() as {
     data?: unknown[]
@@ -229,7 +237,7 @@ problemsRouter.post('/:id/test-cases', async (c) => {
   return c.json({ testCase: row ? testCaseToJson(row, p.gradingMode) : null }, 201)
 })
 
-problemsRouter.patch('/:id/test-cases/:tcId', async (c) => {
+problemsRouter.patch('/:id/test-cases/:tcId', requireAuth, async (c) => {
   const problemId = c.req.param('id')
   const tcId = c.req.param('tcId')
   const patch = await c.req.json() as {
@@ -244,7 +252,7 @@ problemsRouter.patch('/:id/test-cases/:tcId', async (c) => {
   return c.json({ testCase: testCaseToJson(row, p.gradingMode) })
 })
 
-problemsRouter.delete('/:id/test-cases/:tcId', async (c) => {
+problemsRouter.delete('/:id/test-cases/:tcId', requireAuth, async (c) => {
   const problemId = c.req.param('id')
   const tcId = c.req.param('tcId')
   const client = getLibsqlClient()

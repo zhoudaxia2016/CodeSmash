@@ -2,9 +2,10 @@ import { useState, useEffect, useLayoutEffect, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { ChevronDown } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
-import { useProblem, useStartBattle, useBattle } from '@/hooks/useApi'
+import { useMe, useProblem, useStartBattle, useBattle } from '@/hooks/useApi'
 import { usePersistProblemEditorUpdate } from '@/hooks/usePersistProblemEditorUpdate'
 import type { PlatformModel, Problem, ProblemGradingContext } from '@/types'
+import { saveBattleToLocalHistory } from '@/utils/battle-local-history'
 import { defaultAuthoringModelId } from '@/lib/authoring-model'
 import { ProblemEditor, type ProblemEditorProps } from '@/components/problem-editor'
 import { Result } from './result'
@@ -22,6 +23,8 @@ const HEADER_SLOT_ID = 'battle-header-slot'
 
 export function Battle({ models, problems }: { models: PlatformModel[]; problems: Problem[] }) {
   const queryClient = useQueryClient()
+  const { data: meData } = useMe()
+  const currentUser = meData?.user ?? null
   const [selectedProblem, setSelectedProblem] = useState('')
   const [problemDetailOpen, setProblemDetailOpen] = useState(false)
   const [modelA, setModelA] = useState('')
@@ -81,6 +84,12 @@ export function Battle({ models, problems }: { models: PlatformModel[]; problems
   useEffect(() => {
     setProblemDetailOpen(false)
   }, [selectedProblem])
+
+  useEffect(() => {
+    if (!battle) return
+    if (battle.status !== 'completed' && battle.status !== 'failed') return
+    saveBattleToLocalHistory(battle)
+  }, [battle])
 
   useEffect(() => {
     if (models.length > 0) {
@@ -177,8 +186,14 @@ export function Battle({ models, problems }: { models: PlatformModel[]; problems
           variant="secondary"
           size="sm"
           className="shrink-0"
-          disabled={models.length === 0}
-          title={models.length === 0 ? '需至少一个可用模型以使用命题辅助' : undefined}
+          disabled={models.length === 0 || !currentUser}
+          title={
+            !currentUser
+              ? '请使用 GitHub 登录后创建题目'
+              : models.length === 0
+                ? '需至少一个可用模型以使用命题辅助'
+                : undefined
+          }
           onClick={() => setNewProblemOpen(true)}
         >
           新建题目
@@ -216,6 +231,7 @@ export function Battle({ models, problems }: { models: PlatformModel[]; problems
         runTestCases={runTestCases}
         battleTestsReady={battleTestsReady}
         grading={gradingContext}
+        currentUser={currentUser}
       />
 
       <NewProblem

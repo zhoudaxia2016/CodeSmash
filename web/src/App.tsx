@@ -1,13 +1,50 @@
-import { useState } from 'react'
-import { useModels, useProblems } from '@/hooks/useApi'
+import { useEffect, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
+import { api } from '@/api/client'
+import { useMe, useModels, useProblems } from '@/hooks/useApi'
 import { Battle } from '@/pages/battle'
 import { LeaderboardPage } from '@/pages/leaderboard'
 import { ProblemsPage } from '@/pages/problems'
+import { Admin } from '@/pages/admin'
+
+type MainView = 'battle' | 'problems' | 'leaderboard' | 'admin'
+type AdminTab = 'models' | 'logs'
+
+function githubLoginHref(): string {
+  const apiBase = import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, '') ?? ''
+  const postLogin = window.location.href.split('#')[0]
+  if (apiBase) {
+    return `${apiBase}/api/auth/github?post_login=${encodeURIComponent(postLogin)}`
+  }
+  return `${window.location.origin}/api/auth/github`
+}
 
 function App() {
+  const queryClient = useQueryClient()
+  const { data: meData, isLoading: meLoading } = useMe()
+  const user = meData?.user ?? null
   const { data: models = [] } = useModels()
   const { data: problems = [] } = useProblems()
-  const [view, setView] = useState<'battle' | 'problems' | 'leaderboard'>('battle')
+  const [view, setView] = useState<MainView>('battle')
+  const [adminTab, setAdminTab] = useState<AdminTab>('models')
+  const [authBanner, setAuthBanner] = useState<string | null>(null)
+
+  useEffect(() => {
+    const err = new URLSearchParams(window.location.search).get('auth_error')
+    if (err) {
+      setAuthBanner('登录失败，请检查 GitHub OAuth 配置后重试。')
+      window.history.replaceState({}, '', window.location.pathname)
+    }
+  }, [])
+
+  const handleLogout = async () => {
+    try {
+      await api.logout()
+    } finally {
+      queryClient.setQueryData(['me'], { user: null })
+      void queryClient.invalidateQueries({ queryKey: ['me'] })
+    }
+  }
 
   return (
     <div className="flex h-full min-h-0 overflow-hidden bg-background">
@@ -23,7 +60,7 @@ function App() {
             </span>
           </div>
         </div>
-        <nav className="flex flex-col gap-0.5" aria-label="Main">
+        <nav className="flex flex-1 flex-col gap-0.5 min-h-0" aria-label="Main">
           <button
             type="button"
             onClick={() => setView('battle')}
@@ -72,7 +109,65 @@ function App() {
             />
             Leaderboard
           </button>
+          {user?.role === 'admin' && (
+            <button
+              type="button"
+              onClick={() => setView('admin')}
+              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors text-left ${
+                view === 'admin'
+                  ? 'bg-arena-sidebar-active text-arena-sidebar-active-fg shadow-arena'
+                  : 'text-arena-sidebar-foreground hover:bg-arena-sidebar-active/60 hover:text-foreground'
+              }`}
+            >
+              <span
+                className={`w-2 h-2 rounded-full shrink-0 ${
+                  view === 'admin' ? 'bg-amber-400/90' : 'bg-muted-foreground/40'
+                }`}
+              />
+              Admin
+            </button>
+          )}
         </nav>
+
+        <div className="mt-4 shrink-0 border-t border-arena-sidebar-border pt-4 px-1 space-y-2">
+          {meLoading ? (
+            <p className="text-xs text-muted-foreground px-2">会话…</p>
+          ) : user ? (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 min-w-0 px-2">
+                {user.avatarUrl ? (
+                  <img
+                    src={user.avatarUrl}
+                    alt=""
+                    className="h-8 w-8 rounded-full shrink-0 ring-1 ring-border"
+                  />
+                ) : (
+                  <div className="h-8 w-8 rounded-full bg-muted shrink-0" />
+                )}
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-medium text-foreground truncate">
+                    {user.name ?? user.login}
+                  </p>
+                  <p className="text-[10px] text-muted-foreground truncate">@{user.login}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => void handleLogout()}
+                className="w-full rounded-md border border-border/80 bg-background/50 px-2 py-1.5 text-xs font-medium text-foreground hover:bg-muted/50"
+              >
+                退出
+              </button>
+            </div>
+          ) : (
+            <a
+              href={githubLoginHref()}
+              className="flex w-full items-center justify-center rounded-md bg-foreground px-2 py-2 text-xs font-medium text-background hover:opacity-90"
+            >
+              GitHub 登录
+            </a>
+          )}
+        </div>
       </aside>
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden">
@@ -81,6 +176,18 @@ function App() {
           className="relative z-10 shrink-0 overflow-visible border-b border-border/80 bg-arena-header-blur/85 backdrop-blur-md supports-[backdrop-filter]:bg-background/75"
         >
           <div className="mx-auto w-full max-w-7xl px-6 py-4 sm:px-8 lg:px-10">
+            {authBanner && (
+              <p className="mb-3 text-sm text-destructive" role="alert">
+                {authBanner}
+                <button
+                  type="button"
+                  className="ml-2 underline"
+                  onClick={() => setAuthBanner(null)}
+                >
+                  关闭
+                </button>
+              </p>
+            )}
             {view === 'battle' ? (
               <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between lg:gap-6">
                 <h1 className="shrink-0 text-xl font-semibold tracking-tight text-foreground">Battle</h1>
@@ -97,6 +204,8 @@ function App() {
                   className="flex min-w-0 flex-1 flex-wrap items-center gap-2 lg:justify-end"
                 />
               </div>
+            ) : view === 'admin' ? (
+              <h1 className="text-xl font-semibold tracking-tight text-foreground">后台</h1>
             ) : (
               <h1 className="text-xl font-semibold tracking-tight text-foreground">Leaderboard</h1>
             )}
@@ -108,6 +217,12 @@ function App() {
             {view === 'battle' && <Battle models={models} problems={problems} />}
             {view === 'problems' && <ProblemsPage />}
             {view === 'leaderboard' && <LeaderboardPage />}
+            {view === 'admin' && user?.role === 'admin' && (
+              <Admin tab={adminTab} onTabChange={setAdminTab} />
+            )}
+            {view === 'admin' && user?.role !== 'admin' && (
+              <p className="text-sm text-muted-foreground">需要管理员权限。</p>
+            )}
           </div>
         </main>
       </div>

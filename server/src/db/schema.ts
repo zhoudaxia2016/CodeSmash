@@ -38,6 +38,23 @@ async function migrateDropTestCaseEnabled(client: Client): Promise<void> {
   }
 }
 
+async function migrateAddProblemsCreatedBy(client: Client): Promise<void> {
+  try {
+    const res = await client.execute({ sql: 'PRAGMA table_info(problems)', args: [] })
+    const has = res.rows.some(
+      (row) => String((row as Record<string, unknown>).name) === 'created_by',
+    )
+    if (has) return
+    await client.execute({
+      sql: 'ALTER TABLE problems ADD COLUMN created_by TEXT REFERENCES users(id)',
+      args: [],
+    })
+    console.log('[db] migration: added problems.created_by')
+  } catch (e) {
+    console.warn('[db] migration: problems.created_by failed', e)
+  }
+}
+
 /** `output_text` → `output_json` (structured delta log); existing DBs get new column via ALTER. */
 async function migrateLlmCallLogsOutputJson(client: Client): Promise<void> {
   try {
@@ -116,6 +133,50 @@ export async function initDb(): Promise<void> {
   await client.batch(
     [
       {
+        sql: `CREATE TABLE IF NOT EXISTS users (
+  id TEXT PRIMARY KEY,
+  github_id TEXT NOT NULL UNIQUE,
+  login TEXT NOT NULL,
+  name TEXT,
+  avatar_url TEXT,
+  role TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+)`,
+        args: [],
+      },
+      {
+        sql: `CREATE TABLE IF NOT EXISTS user_sessions (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  expires_at TEXT NOT NULL,
+  created_at TEXT NOT NULL
+)`,
+        args: [],
+      },
+      {
+        sql: `CREATE INDEX IF NOT EXISTS idx_user_sessions_user
+  ON user_sessions (user_id)`,
+        args: [],
+      },
+      {
+        sql: `CREATE TABLE IF NOT EXISTS battle_results (
+  id TEXT PRIMARY KEY,
+  problem_id TEXT NOT NULL,
+  model_a_id TEXT NOT NULL,
+  model_b_id TEXT NOT NULL,
+  payload_json TEXT NOT NULL,
+  created_by TEXT NOT NULL REFERENCES users(id),
+  created_at TEXT NOT NULL
+)`,
+        args: [],
+      },
+      {
+        sql: `CREATE INDEX IF NOT EXISTS idx_battle_results_created_by
+  ON battle_results (created_by, created_at DESC)`,
+        args: [],
+      },
+      {
         sql: `CREATE TABLE IF NOT EXISTS llm_call_logs (
   id TEXT PRIMARY KEY,
   created_at TEXT NOT NULL,
@@ -156,6 +217,7 @@ export async function initDb(): Promise<void> {
   function_signature TEXT NOT NULL,
   grading_mode TEXT NOT NULL DEFAULT 'expected',
   verify_source TEXT,
+  created_by TEXT REFERENCES users(id),
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 )`,
@@ -185,6 +247,7 @@ export async function initDb(): Promise<void> {
   await migrateStripTestCaseSourceAndSort(client)
   await migrateLlmCallLogsOutputJson(client)
   await migrateLlmCallLogsDropOutputText(client)
+  await migrateAddProblemsCreatedBy(client)
 
   await seedProblemsIfEmpty(client)
 

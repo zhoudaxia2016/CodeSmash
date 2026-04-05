@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import {
   useDeleteProblem,
+  useMe,
   useModels,
   useProblem,
   useProblems,
@@ -37,6 +38,8 @@ function matchesSearch(p: Problem, q: string): boolean {
 
 export function ProblemsPage() {
   const queryClient = useQueryClient()
+  const { data: meData } = useMe()
+  const currentUser = meData?.user ?? null
   const { data: models = [], isLoading: modelsLoading } = useModels()
   const { data: problems = [], isLoading: problemsLoading, isError: problemsError } = useProblems()
   const [search, setSearch] = useState('')
@@ -98,6 +101,10 @@ export function ProblemsPage() {
   const detailFailed = editOpen && !!editId && editQuery.isError && !editQuery.data
 
   const openEdit = (id: string) => {
+    if (!currentUser) {
+      window.alert('请使用 GitHub 登录后编辑题目。')
+      return
+    }
     setEditId(id)
     setEditOpen(true)
   }
@@ -125,8 +132,14 @@ export function ProblemsPage() {
       type="button"
       size="sm"
       className="h-9 shrink-0"
-      disabled={models.length === 0}
-      title={models.length === 0 ? '需至少一个可用模型以使用命题辅助' : undefined}
+      disabled={models.length === 0 || !currentUser}
+      title={
+        !currentUser
+          ? '请使用 GitHub 登录后创建题目'
+          : models.length === 0
+            ? '需至少一个可用模型以使用命题辅助'
+            : undefined
+      }
       onClick={() => setNewOpen(true)}
     >
       新建题目
@@ -211,7 +224,8 @@ export function ProblemsPage() {
             type="button"
             className="mt-4"
             size="sm"
-            disabled={models.length === 0}
+            disabled={models.length === 0 || !currentUser}
+            title={!currentUser ? '请使用 GitHub 登录后创建题目' : undefined}
             onClick={() => setNewOpen(true)}
           >
             新建题目
@@ -242,6 +256,7 @@ export function ProblemsPage() {
           onRowActivate={openEdit}
           onDelete={handleDelete}
           deletePending={deleteProblem.isPending}
+          showDelete={!!currentUser}
         />
       )}
 

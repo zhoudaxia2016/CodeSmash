@@ -18,8 +18,18 @@ export interface Problem {
   gradingMode: GradingMode
   verifySource?: string | null
   referenceNote?: string
+  /** Local user id when created by a logged-in user. */
+  createdBy?: string | null
   createdAt: string
   updatedAt: string
+}
+
+export type AuthUser = {
+  id: string
+  login: string
+  name: string | null
+  avatarUrl: string | null
+  role: string
 }
 
 export interface TestCase {
