@@ -38,7 +38,16 @@ export function useCreateProblem() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (data: Parameters<typeof api.createProblem>[0]) => api.createProblem(data),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['problems'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['problems'] })
+    },
+  })
+}
+
+export function useSuggestProblemAuthoring() {
+  return useMutation({
+    mutationFn: (body: Parameters<typeof api.suggestProblemAuthoring>[0]) =>
+      api.suggestProblemAuthoring(body),
   })
 }
 

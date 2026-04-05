@@ -1,6 +1,6 @@
 import { Compare } from '../compare'
 import { buildMockBattle } from '../lib/mockBattle'
-import type { BattleSession, TestCase } from '@/types'
+import type { BattleSession, ProblemGradingContext, TestCase } from '@/types'
 
 type Props = {
   battle: BattleSession | null | undefined
@@ -13,6 +13,7 @@ type Props = {
   modelBName: string
   runTestCases: TestCase[]
   battleTestsReady: boolean
+  grading: ProblemGradingContext
 }
 
 export function Result({
@@ -26,6 +27,7 @@ export function Result({
   modelBName,
   runTestCases,
   battleTestsReady,
+  grading,
 }: Props) {
   if (starting && !battleId) {
     return (
@@ -95,6 +97,7 @@ export function Result({
           resultB={effective.modelBResult}
           testCases={runTestCases}
           testsReady={battleTestsReady}
+          grading={grading}
           submitOfficialToServer={fromServerBattle}
           streamBattle={fromServerBattle && battle?.status === 'running'}
         />

@@ -19,8 +19,6 @@ export type StreamLlmOptions = {
   sourceId?: string | null
 }
 
-let warnedLlmDbMissingUrl = false
-
 export interface LLMRequest {
   model: string
   prompt: string
@@ -112,13 +110,6 @@ async function* streamChat(
   const persistRow = () => {
     if (!shouldPersist || !isLlmDbLogEnabled()) return
     const cli = getLibsqlClient()
-    if (!cli) {
-      if (!warnedLlmDbMissingUrl) {
-        warnedLlmDbMissingUrl = true
-        console.warn('[llm-db] LLM_DB_LOG is enabled but LIBSQL_URL is unset; skipping DB writes')
-      }
-      return
-    }
     const completedAt = new Date().toISOString()
     const messagesJson = serializeMessagesForDb(messages, maxMessagesCharsForDb())
     const output_text = streamSucceeded
@@ -419,5 +410,393 @@ export async function callLLM(provider: 'minimax' | 'deepseek', request: LLMRequ
     thought: thought.trim() || '无分析内容',
     codingThought,
     code: runnable,
+  }
+}
+
+/** Normalize OpenAI-compatible non-stream `choices[0].message` (string / parts / reasoning). */
+function extractCompletionMessageContent(json: unknown): string {
+  const root = json as {
+    choices?: Array<{
+      message?: {
+        content?: unknown
+        reasoning_content?: unknown
+        text?: unknown
+      }
+    }>
+  }
+  const msg = root.choices?.[0]?.message
+  if (!msg || typeof msg !== 'object') return ''
+
+  const collectContent = (): string => {
+    const c = msg.content
+    if (typeof c === 'string') return c
+    if (Array.isArray(c)) {
+      const chunks: string[] = []
+      for (const block of c) {
+        if (block && typeof block === 'object') {
+          const t = (block as { text?: string }).text
+          if (typeof t === 'string') chunks.push(t)
+        }
+      }
+      return chunks.join('')
+    }
+    return ''
+  }
+
+  let text = collectContent().trim()
+  if (!text && typeof msg.reasoning_content === 'string') {
+    text = msg.reasoning_content.trim()
+  }
+  if (!text && typeof msg.text === 'string') {
+    text = msg.text.trim()
+  }
+  return text
+}
+
+async function chatCompletionContent(
+  provider: 'minimax' | 'deepseek',
+  platformModelId: string,
+  messages: ChatMessage[],
+  options: StreamLlmOptions,
+): Promise<string> {
+  const config = PROVIDERS[provider]
+  if (!config.apiKey) {
+    throw new Error(`${provider} API key not configured`)
+  }
+  const apiModel = resolveApiModel(provider, platformModelId)
+  const tag = options.logLabel ? ` ${options.logLabel}` : ''
+  logChatPrompts(tag, messages)
+
+  const createdAt = new Date().toISOString()
+  const t0 = Date.now()
+  let outputAccum = ''
+  let persistError: string | null = null
+  let streamSucceeded = false
+
+  const persistRow = () => {
+    if (!isLlmDbLogEnabled()) return
+    const cli = getLibsqlClient()
+    const completedAt = new Date().toISOString()
+    scheduleInsertLlmCallLog(cli, {
+      id: crypto.randomUUID(),
+      created_at: createdAt,
+      completed_at: completedAt,
+      source: options.source,
+      source_id: options.sourceId ?? null,
+      provider,
+      model: apiModel,
+      messages: serializeMessagesForDb(messages, maxMessagesCharsForDb()),
+      output_text: streamSucceeded
+        ? truncateOutputForDb(outputAccum, maxOutputCharsForDb())
+        : null,
+      error: streamSucceeded ? null : persistError,
+      duration_ms: Date.now() - t0,
+    })
+  }
+
+  try {
+    const response = await fetch(`${config.baseUrl}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${config.apiKey}`,
+      },
+      body: JSON.stringify({
+        model: apiModel,
+        messages,
+        max_tokens: 4096,
+        stream: false,
+      }),
+    })
+
+    if (!response.ok) {
+      const error = await response.text()
+      persistError = `${provider} API error: ${response.status} - ${error.slice(0, 500)}`
+      throw new Error(persistError)
+    }
+
+    const json: unknown = await response.json()
+    const content = extractCompletionMessageContent(json)
+    if (!content) {
+      const preview = JSON.stringify(json).slice(0, 1200)
+      console.error(`[llm]${tag} non-stream empty message.content; body preview=${preview}`)
+      persistError = '模型返回空正文（请检查 API Key、模型名或非流式响应格式）'
+      throw new Error(persistError)
+    }
+
+    outputAccum = content
+    streamSucceeded = true
+    return content.trim()
+  } catch (e) {
+    if (persistError === null) {
+      persistError = e instanceof Error ? e.message : String(e)
+    }
+    throw e
+  } finally {
+    persistRow()
+  }
+}
+
+const PROBLEM_AUTHORING_SYSTEM = `你是竞赛编程题库助手。用户可能只提供题目描述；也可能额外提供标题、函数签名、以及若干用例的输入 data（二维 JSON：每个用例是传给函数的参数数组）。
+
+你的任务：
+- 若用户未给函数签名：根据题意设计一条合理的 JavaScript/TypeScript 风格函数声明（含参数名与类型注解），并令 entryPoint 与声明中的函数名一致。
+- 若用户未给用例 data 或为空：自行设计至少 3 条有代表性的测试输入（覆盖典型与边界），与签名参数顺序一致。
+- 若用户已给用例 data：在保持 data 内容不变的前提下补全判题信息；需要时可微调但优先尊重用户 data。
+
+判题规则：
+1) 若答案可用结构化相等判定（整数、数组、布尔等），gradingMode 用 "expected"，每个用例给出 ans。
+2) 若多解、浮点容差、无序集合等，gradingMode 用 "verify"，输出完整 verify 函数源码（JavaScript）。
+3) verify 约定：function verify(...args, candidate) { ... }，args 与 data 展开顺序一致，candidate 为选手返回值；返回 true 表示通过。
+
+输出：只输出一个可被 JSON.parse 解析的 JSON 对象，不要 Markdown、不要其它文字。键名必须包含：
+title（简短题目标题，若用户已有标题可沿用或略改）,
+functionSignature（完整一行函数声明，与 entryPoint 一致）,
+entryPoint, gradingMode, testCases, verifySource（verify 时为字符串否则 null）, reasoning。
+testCases 每项含 data 与 ans（expected 时 ans 必填）。字符串内换行用 \\n，双引号用 \\"，保证合法 JSON。`
+
+export type ProblemAuthoringParsed = {
+  title?: string
+  functionSignature?: string
+  entryPoint: string
+  gradingMode: 'expected' | 'verify'
+  testCases: Array<{ data: unknown[]; ans?: unknown }>
+  verifySource?: string | null
+  reasoning?: string
+}
+
+/** Remove trailing commas before } or ] (invalid JSON but common in model output). */
+function stripTrailingCommasInJson(json: string): string {
+  return json.replace(/,\s*(\]|\})/g, '$1')
+}
+
+/** First top-level `{ ... }` with string-aware brace matching. */
+function extractBalancedJsonObject(s: string): string | null {
+  const start = s.indexOf('{')
+  if (start < 0) return null
+  let depth = 0
+  let inStr = false
+  let esc = false
+  for (let i = start; i < s.length; i++) {
+    const c = s[i]
+    if (inStr) {
+      if (esc) {
+        esc = false
+        continue
+      }
+      if (c === '\\') {
+        esc = true
+        continue
+      }
+      if (c === '"') inStr = false
+      continue
+    }
+    if (c === '"') {
+      inStr = true
+      continue
+    }
+    if (c === '{') depth++
+    else if (c === '}') {
+      depth--
+      if (depth === 0) return s.slice(start, i + 1)
+    }
+  }
+  return null
+}
+
+function tryParseAuthoringRecord(raw: string): Record<string, unknown> | null {
+  const cleaned = stripInterleavedThinking(raw).trim()
+  const attempts: string[] = [cleaned]
+  for (const m of cleaned.matchAll(/```(?:json)?\s*([\s\S]*?)```/gi)) {
+    attempts.push(m[1].trim())
+  }
+
+  for (let chunk of attempts) {
+    chunk = chunk.trim()
+    if (!chunk) continue
+
+    const tryOne = (s: string): Record<string, unknown> | null => {
+      const t = s.trim()
+      if (!t) return null
+      try {
+        const v = JSON.parse(t) as unknown
+        if (v && typeof v === 'object' && !Array.isArray(v)) return v as Record<string, unknown>
+      } catch {
+        /* continue */
+      }
+      return null
+    }
+
+    const direct = tryOne(chunk)
+    if (direct) return direct
+
+    const balanced = extractBalancedJsonObject(chunk)
+    if (balanced) {
+      const a = tryOne(balanced)
+      if (a) return a
+      const b = tryOne(stripTrailingCommasInJson(balanced))
+      if (b) return b
+    }
+
+    const i = chunk.indexOf('{')
+    const j = chunk.lastIndexOf('}')
+    if (i >= 0 && j > i) {
+      const slice = chunk.slice(i, j + 1)
+      const a = tryOne(slice)
+      if (a) return a
+      const b = tryOne(stripTrailingCommasInJson(slice))
+      if (b) return b
+    }
+  }
+  return null
+}
+
+function normalizeAuthoringKeys(o: Record<string, unknown>): Record<string, unknown> {
+  const out = { ...o }
+  if (out.entryPoint == null && typeof out['入口函数名'] === 'string') {
+    out.entryPoint = out['入口函数名']
+  }
+  if (out.entryPoint == null && typeof out['入口'] === 'string') {
+    out.entryPoint = out['入口']
+  }
+  if (out.gradingMode == null && typeof out['判题模式'] === 'string') {
+    out.gradingMode = out['判题模式']
+  }
+  if (typeof out.gradingMode === 'string') {
+    const raw = out.gradingMode.trim()
+    const v = raw.toLowerCase()
+    if (
+      v === 'verify' ||
+      raw.includes('验证') ||
+      v.includes('verify')
+    ) {
+      out.gradingMode = 'verify'
+    } else if (
+      v === 'expected' ||
+      raw.includes('标准') ||
+      v.includes('expected')
+    ) {
+      out.gradingMode = 'expected'
+    }
+  }
+  if (out.verifySource == null && typeof out['verify'] === 'string') {
+    out.verifySource = out['verify']
+  }
+  if (out.verifySource == null && typeof out['验证函数'] === 'string') {
+    out.verifySource = out['验证函数']
+  }
+  if (out.reasoning == null && typeof out['说明'] === 'string') {
+    out.reasoning = out['说明']
+  }
+  if (!Array.isArray(out.testCases) && Array.isArray(out['用例'])) {
+    out.testCases = out['用例']
+  }
+  if (out.title == null && typeof out['题目标题'] === 'string') {
+    out.title = out['题目标题']
+  }
+  if (out.functionSignature == null && typeof out['函数签名'] === 'string') {
+    out.functionSignature = out['函数签名']
+  }
+  return out
+}
+
+export async function generateProblemAuthoring(
+  provider: 'minimax' | 'deepseek',
+  platformModelId: string,
+  input: {
+    title?: string
+    description?: string
+    functionSignature?: string
+    testCasesData: unknown[][]
+    tags?: string[]
+  },
+  options: StreamLlmOptions,
+): Promise<ProblemAuthoringParsed> {
+  const userPayload = {
+    title: input.title?.trim() ?? '',
+    description: input.description?.trim() ?? '',
+    functionSignature: input.functionSignature?.trim() ?? '',
+    tags: input.tags ?? [],
+    testCasesData: input.testCasesData,
+  }
+  const raw = await chatCompletionContent(
+    provider,
+    platformModelId,
+    [
+      { role: 'system', content: PROBLEM_AUTHORING_SYSTEM },
+      {
+        role: 'user',
+        content:
+          `请根据以下 JSON 生成命题助手输出（你的整段回复必须且仅为一个可被 JSON.parse 解析的对象，不要其它文字）：\n${JSON.stringify(userPayload)}`,
+      },
+    ],
+    { ...options, logLabel: options.logLabel ?? 'problem_authoring' },
+  )
+
+  const parsedObj = tryParseAuthoringRecord(raw)
+  if (!parsedObj) {
+    const preview = raw.length > 600 ? `${raw.slice(0, 600)}…` : raw
+    console.error(`[llm] problem_authoring parse failed, rawLen=${raw.length} preview=\n${preview}`)
+    throw new Error(
+      '命题助手返回的内容无法解析为 JSON。请重试；若多次失败可缩短描述或检查模型是否按指令只输出 JSON。',
+    )
+  }
+  const o = normalizeAuthoringKeys(parsedObj)
+  const entryPoint = typeof o.entryPoint === 'string' ? o.entryPoint.trim() : ''
+  const gradingMode = o.gradingMode === 'verify' ? 'verify' : 'expected'
+  if (!entryPoint) throw new Error('JSON 缺少 entryPoint')
+
+  const titleOut =
+    typeof o.title === 'string' && o.title.trim() ? o.title.trim() : undefined
+  const functionSignatureOut =
+    typeof o.functionSignature === 'string' && o.functionSignature.trim()
+      ? o.functionSignature.trim()
+      : undefined
+
+  const tcsRaw = o.testCases
+  const testCases: Array<{ data: unknown[]; ans?: unknown }> = []
+  if (Array.isArray(tcsRaw)) {
+    for (const item of tcsRaw) {
+      if (!item || typeof item !== 'object') continue
+      const row = item as Record<string, unknown>
+      const data = row.data
+      if (!Array.isArray(data)) continue
+      const ans = row.ans
+      testCases.push({
+        data: data as unknown[],
+        ans: ans !== undefined ? ans : undefined,
+      })
+    }
+  }
+
+  if (testCases.length === 0) {
+    for (const d of input.testCasesData) {
+      testCases.push({ data: [...d] })
+    }
+  }
+
+  if (testCases.length === 0) {
+    throw new Error('模型未返回有效测试用例，请重试或补充题干细节')
+  }
+
+  if (gradingMode === 'expected') {
+    for (let i = 0; i < testCases.length; i++) {
+      if (testCases[i].ans === undefined) {
+        throw new Error(`expected 模式下第 ${i + 1} 条用例缺少 ans`)
+      }
+    }
+  }
+
+  const verifySource =
+    typeof o.verifySource === 'string' && o.verifySource.trim() ? o.verifySource.trim() : null
+
+  return {
+    ...(titleOut ? { title: titleOut } : {}),
+    ...(functionSignatureOut ? { functionSignature: functionSignatureOut } : {}),
+    entryPoint,
+    gradingMode,
+    testCases,
+    verifySource: gradingMode === 'verify' ? verifySource : null,
+    reasoning: typeof o.reasoning === 'string' ? o.reasoning : undefined,
   }
 }

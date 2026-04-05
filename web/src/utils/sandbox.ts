@@ -8,7 +8,7 @@ import {
   shouldInterruptAfterDeadline,
   type QuickJSWASMModule,
 } from 'quickjs-emscripten'
-import type { TestCase, TestResult } from '../types'
+import type { ProblemGradingContext, TestCase, TestResult } from '../types'
 
 const EXECUTION_TIMEOUT_MS = 5000
 
@@ -47,16 +47,32 @@ function actualToComparable(raw: unknown): string {
   return String(raw).trim()
 }
 
-async function evalMainCase(
+function assertSafeIdentifier(name: string): string {
+  if (!/^[a-zA-Z_$][\w$]*$/.test(name)) {
+    throw new Error(`非法入口名（仅允许标识符）: ${name}`)
+  }
+  return name
+}
+
+function expectedComparable(ans: unknown): string {
+  return actualToComparable(ans)
+}
+
+async function evalUserCase(
   QuickJS: QuickJSWASMModule,
   code: string,
   testCase: TestCase,
+  grading: ProblemGradingContext,
 ): Promise<TestResult> {
   const startTime = performance.now()
   const vm = QuickJS.newContext()
   vm.runtime.setInterruptHandler(
     shouldInterruptAfterDeadline(Date.now() + EXECUTION_TIMEOUT_MS),
   )
+
+  const entryPoint = assertSafeIdentifier(grading.entryPoint)
+  const inputDisplay = testCase.input
+  const expectedDisplay = testCase.expectedOutput
 
   try {
     const load = vm.evalCode(code, 'user.js', { type: 'global' })
@@ -70,8 +86,8 @@ async function evalMainCase(
       disposeEvalResult(load)
       return {
         testCaseId: testCase.id,
-        input: testCase.input,
-        expectedOutput: testCase.expectedOutput,
+        input: inputDisplay,
+        expectedOutput: expectedDisplay,
         actualOutput: errText ? `加载代码失败: ${errText}` : '',
         passed: false,
         timeMs: performance.now() - startTime,
@@ -79,11 +95,89 @@ async function evalMainCase(
     }
     disposeEvalResult(load)
 
-    const call = vm.evalCode(
-      `(function(){ const __r = main(${testCase.input}); return typeof __r === 'object' && __r !== null ? JSON.stringify(__r) : String(__r).trim(); })()`,
-      'run.js',
-      { type: 'global' },
-    )
+    if (grading.gradingMode === 'verify') {
+      const verifySrc = grading.verifySource?.trim()
+      if (!verifySrc) {
+        return {
+          testCaseId: testCase.id,
+          input: inputDisplay,
+          expectedOutput: expectedDisplay,
+          actualOutput: '题目未配置 verify 源码',
+          passed: false,
+          timeMs: performance.now() - startTime,
+        }
+      }
+      const vload = vm.evalCode(verifySrc, 'verify.js', { type: 'global' })
+      if (vload.error) {
+        let errText = ''
+        try {
+          errText = String(vm.dump(vload.error))
+        } catch {
+          errText = '（无法读取错误信息）'
+        }
+        disposeEvalResult(vload)
+        return {
+          testCaseId: testCase.id,
+          input: inputDisplay,
+          expectedOutput: expectedDisplay,
+          actualOutput: `加载 verify 失败: ${errText}`,
+          passed: false,
+          timeMs: performance.now() - startTime,
+        }
+      }
+      disposeEvalResult(vload)
+
+      const dataJson = JSON.stringify(testCase.data)
+      const callScript = `(function(){
+  const __args = ${dataJson};
+  const __cand = ${entryPoint}.apply(null, __args);
+  const __ok = verify.apply(null, __args.concat([__cand]));
+  return __ok === true ? '1' : __ok === false ? '0' : 'nonbool:' + String(__ok);
+})()`
+
+      const call = vm.evalCode(callScript, 'run.js', { type: 'global' })
+      if (call.error) {
+        let errText = ''
+        try {
+          errText = String(vm.dump(call.error))
+        } catch {
+          errText = '（无法读取错误信息）'
+        }
+        disposeEvalResult(call)
+        return {
+          testCaseId: testCase.id,
+          input: inputDisplay,
+          expectedOutput: expectedDisplay,
+          actualOutput: errText ? `运行失败: ${errText}` : '',
+          passed: false,
+          timeMs: performance.now() - startTime,
+        }
+      }
+
+      const raw = call.value !== undefined ? vm.dump(call.value) : ''
+      disposeEvalResult(call)
+      const flag = String(raw).trim()
+      const passed = flag === '1'
+      const actualOutput = passed ? 'true' : flag === '0' ? 'false' : flag
+
+      return {
+        testCaseId: testCase.id,
+        input: inputDisplay,
+        expectedOutput: expectedDisplay || '(verify)',
+        actualOutput,
+        passed,
+        timeMs: performance.now() - startTime,
+      }
+    }
+
+    const dataJson = JSON.stringify(testCase.data)
+    const callScript = `(function(){
+  const __args = ${dataJson};
+  const __r = ${entryPoint}.apply(null, __args);
+  return typeof __r === 'object' && __r !== null ? JSON.stringify(__r) : String(__r).trim();
+})()`
+
+    const call = vm.evalCode(callScript, 'run.js', { type: 'global' })
     if (call.error) {
       let errText = ''
       try {
@@ -94,8 +188,8 @@ async function evalMainCase(
       disposeEvalResult(call)
       return {
         testCaseId: testCase.id,
-        input: testCase.input,
-        expectedOutput: testCase.expectedOutput,
+        input: inputDisplay,
+        expectedOutput: expectedDisplay,
         actualOutput: errText ? `运行失败: ${errText}` : '',
         passed: false,
         timeMs: performance.now() - startTime,
@@ -105,21 +199,23 @@ async function evalMainCase(
     const raw = call.value !== undefined ? vm.dump(call.value) : ''
     disposeEvalResult(call)
     const actualOutput = actualToComparable(raw)
+    const want =
+      testCase.ans !== undefined ? expectedComparable(testCase.ans) : expectedDisplay
 
     return {
       testCaseId: testCase.id,
-      input: testCase.input,
-      expectedOutput: testCase.expectedOutput,
+      input: inputDisplay,
+      expectedOutput: expectedDisplay,
       actualOutput,
-      passed: actualOutput === testCase.expectedOutput,
+      passed: actualOutput === want,
       timeMs: performance.now() - startTime,
     }
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e)
     return {
       testCaseId: testCase.id,
-      input: testCase.input,
-      expectedOutput: testCase.expectedOutput,
+      input: inputDisplay,
+      expectedOutput: expectedDisplay,
       actualOutput: `沙箱异常: ${msg}`,
       passed: false,
       timeMs: performance.now() - startTime,
@@ -150,12 +246,15 @@ export function useSandbox() {
   }, [])
 
   const runCode = useCallback(
-    async (code: string, testCases: TestCase[]): Promise<TestResult[]> => {
+    async (
+      code: string,
+      testCases: TestCase[],
+      grading: ProblemGradingContext,
+    ): Promise<TestResult[]> => {
       const QuickJS = await initQuickJS()
-      const list = testCases.filter((c) => c.enabled)
       const results: TestResult[] = []
-      for (const testCase of list) {
-        results.push(await evalMainCase(QuickJS, code, testCase))
+      for (const testCase of testCases) {
+        results.push(await evalUserCase(QuickJS, code, testCase, grading))
       }
       return results
     },
@@ -166,16 +265,16 @@ export function useSandbox() {
     async (
       code: string,
       testCases: TestCase[],
+      grading: ProblemGradingContext,
       onProgress: (done: number, total: number, last?: TestResult) => void,
     ): Promise<TestResult[]> => {
       const QuickJS = await initQuickJS()
-      const list = testCases.filter((c) => c.enabled)
       const results: TestResult[] = []
-      onProgress(0, list.length)
-      for (let i = 0; i < list.length; i++) {
-        const r = await evalMainCase(QuickJS, code, list[i])
+      onProgress(0, testCases.length)
+      for (let i = 0; i < testCases.length; i++) {
+        const r = await evalUserCase(QuickJS, code, testCases[i], grading)
         results.push(r)
-        onProgress(i + 1, list.length, r)
+        onProgress(i + 1, testCases.length, r)
       }
       return results
     },
@@ -183,10 +282,11 @@ export function useSandbox() {
   )
 
   const runCodeWithTimeout = useCallback(
-    async (code: string, input: string): Promise<SandboxResult> => {
+    async (code: string, data: unknown[], entryPoint: string): Promise<SandboxResult> => {
       const QuickJS = await initQuickJS()
       const startTime = performance.now()
       const vm = QuickJS.newContext()
+      const ep = assertSafeIdentifier(entryPoint)
       vm.runtime.setInterruptHandler(
         shouldInterruptAfterDeadline(Date.now() + EXECUTION_TIMEOUT_MS),
       )
@@ -202,8 +302,13 @@ export function useSandbox() {
         }
         disposeEvalResult(load)
 
+        const dataJson = JSON.stringify(data)
         const call = vm.evalCode(
-          `(function(){ const __r = main(${input}); return typeof __r === 'object' && __r !== null ? JSON.stringify(__r) : String(__r).trim(); })()`,
+          `(function(){
+  const __args = ${dataJson};
+  const __r = ${ep}.apply(null, __args);
+  return typeof __r === 'object' && __r !== null ? JSON.stringify(__r) : String(__r).trim();
+})()`,
           'run.js',
           { type: 'global' },
         )

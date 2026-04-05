@@ -9,7 +9,7 @@ import {
 import { CodeCell } from './cells/code-cell'
 import { OfficialCell } from './cells/official-cell'
 import { PHASE_PAIR_GRID } from '../lib/battlePhaseLayout'
-import type { ModelResult, TestCase } from '@/types'
+import type { ModelResult, ProblemGradingContext, TestCase } from '@/types'
 
 export type CompareProps = {
   battleId: string
@@ -19,6 +19,7 @@ export type CompareProps = {
   resultB: ModelResult
   testCases: TestCase[]
   testsReady: boolean
+  grading: ProblemGradingContext
   submitOfficialToServer?: boolean
   /** 服务端仍在流式写模型输出时，主列 <main> 跟随滚到底 */
   streamBattle?: boolean
@@ -32,6 +33,7 @@ export function Compare({
   resultB,
   testCases,
   testsReady,
+  grading,
   submitOfficialToServer = true,
   streamBattle = false,
 }: CompareProps) {
@@ -41,6 +43,7 @@ export function Compare({
     result: resultA,
     testCases,
     testsReady,
+    grading,
     submitOfficialToServer,
   })
   const hookB = useBattleModelSide({
@@ -49,6 +52,7 @@ export function Compare({
     result: resultB,
     testCases,
     testsReady,
+    grading,
     submitOfficialToServer,
   })
 
