@@ -96,10 +96,6 @@ function App() {
               </h1>
             )}
           </div>
-          <div
-            id="battle-problem-popover-slot"
-            className="pointer-events-none absolute left-0 right-0 top-full z-[60] w-full"
-          />
         </header>
 
         <main className="min-h-0 flex-1 overflow-y-auto">

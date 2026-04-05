@@ -2,23 +2,22 @@ import { Sparkles } from 'lucide-react'
 import type { PlatformModel } from '@/types'
 import { Button } from '@/components/ui/button'
 
-/**
- * 命题辅助的纯 UI：模型选择与触发按钮。
- * 调用 API 与回填表单的逻辑在 `useProblemAuthoringAssist`（及父组件的 onSuccess）中。
- */
+type Props = {
+  models: PlatformModel[]
+  authorModelId: string
+  onAuthorModelIdChange: (id: string) => void
+  onSuggest: () => void
+  pending: boolean
+}
+
+/** 命题辅助：模型选择与触发；具体请求与回填由 `useProblemAuthoringAssist` / `ProblemEditor` 编排。 */
 export function ProblemAuthoringAssistPanel({
   models,
   authorModelId,
   onAuthorModelIdChange,
   onSuggest,
   pending,
-}: {
-  models: PlatformModel[]
-  authorModelId: string
-  onAuthorModelIdChange: (id: string) => void
-  onSuggest: () => void
-  pending: boolean
-}) {
+}: Props) {
   return (
     <div className="space-y-2 border-t border-border pt-3">
       <div className="flex flex-wrap items-end gap-2">

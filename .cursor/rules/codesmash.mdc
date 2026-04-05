@@ -20,12 +20,19 @@ alwaysApply: true
 
 - 若该 `index.tsx` **只有一份**组件入参类型且无同名冲突，使用模块内 **`type Props = { ... }`**（**不**使用 `NewProblemProps` 这类重复前缀命名），**不必导出**，除非其它文件需要扩展该类型。
 
+### `components/` 内单文件的 Props 命名
+
+- **一个文件、一个组件、一份入参**时，类型名统一为 **`Props`**（**不要** `FooFormProps`、`FooPanelProps` 等与组件名机械拼接的长类型名）。
+- **同一文件内多个组件**时：第一个用 `Props`，其余用简短区分名（如 `GradingProps`），或**拆成单组件单文件**，避免同文件两个 `type Props` 冲突。
+- **功能包对外**若需稳定类型名（供其它模块 import），可在 `index.tsx` 写 `export type ProblemEditorProps = Props` 或 `export type { Props as ProblemEditorProps }`，**仅出口一处**；子文件类型不导出。
+
 ### `components/` 与逻辑复用
 
-- **功能目录名**用领域/动作（如 `create-problem`），**不要**绑定具体实现形态（如 `create-problem-form`）。
-- **入口必须是 `index.tsx`**：主组件定义写在 `components/<feature>/index.tsx`，**不要**用 `index.ts` 只做 re-export 桶。
-- 同目录下可并列子模块（如 `problem-authoring-assist-panel.tsx`）。**不要**从 `components` 再导出 `utils` 等纯函数；纯函数放在 **`web/src/utils/`**，按领域命名（如 `test-case-rows.ts`），避免以单一动词堆叠的长文件名（如 `parse-test-case-rows.ts`）。
+- **功能目录名**用领域/动作（如 `problem-editor`），**不要**绑定具体实现形态（如 `problem-editor-modal`）。
+- **入口必须是 `index.tsx`**：对外**只导出该功能的主组件 + 必要类型**（如 `ProblemEditor`、`ProblemEditorProps`）；**不要**在 `index` 再导出 Host、Header 等仅用于拼装的子组件。
+- **仅被 `index.tsx` 使用的布局/宿主逻辑**（portal、点击外部关闭、Esc 等）**写在 `index.tsx` 内即可**，不要为「只被 index 引一次」再单拆 `host.tsx` 之类文件，除非体积过大难以维护。
+- 同目录下可并列子模块（如 `authoring-assist-panel.tsx`）。**不要**从 `components` 再导出 `utils` 等纯函数；纯函数放在 **`web/src/utils/`**，按领域命名（如 `test-case-rows.ts`），避免以单一动词堆叠的长文件名（如 `parse-test-case-rows.ts`）。
 
 ### 大模型 / 接口编排
 
-- 调用命题辅助、mutation 等与 **BYOK API** 相关的编排放在 **`hooks/`**（如 `useProblemAuthoringAssist`）；表单旁只放小块 **展示组件**（如 `create-problem/problem-authoring-assist-panel.tsx`），由 `index.tsx` 或页面组合。
+- 调用命题辅助、mutation 等与 **BYOK API** 相关的编排放在 **`hooks/`**（如 `useProblemAuthoringAssist`）；题目编辑域内小块 UI 放在 **`components/problem-editor/`** 子文件，由该目录 `index.tsx` 或页面组合。
