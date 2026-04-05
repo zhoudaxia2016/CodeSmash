@@ -9,7 +9,7 @@ import { cn } from '@/lib/utils'
 import { parseRowsToTestCases, type TestCaseRow } from '@/utils/test-case-rows'
 import { ProblemAuthoringAssistPanel } from './problem-authoring-assist-panel'
 
-export type CreateProblemFormProps = {
+export type CreateProblemProps = {
   models: PlatformModel[]
   defaultModelId: string
   /** 创建成功（服务端返回题目 id） */
@@ -25,7 +25,7 @@ export type CreateProblemFormProps = {
   footerClassName?: string
 }
 
-export function CreateProblemForm({
+export function CreateProblem({
   models,
   defaultModelId,
   onCreated,
@@ -35,7 +35,7 @@ export function CreateProblemForm({
   className,
   contentClassName,
   footerClassName,
-}: CreateProblemFormProps) {
+}: CreateProblemProps) {
   const gradingName = useId()
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
