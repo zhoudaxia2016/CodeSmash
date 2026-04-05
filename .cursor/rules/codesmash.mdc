@@ -1,0 +1,30 @@
+---
+description: CodeSmash Web 结构与组件约定（pages、components、hooks、utils）
+globs: ["web/**/*"]
+alwaysApply: true
+---
+
+## Web 前端：`pages` 与组件约定（`web/src`）
+
+### 页面目录
+
+- 与现有结构一致：功能放在目录里，入口为 **`index.tsx`**。  
+  例：`pages/battle/compare/index.tsx`。
+- 避免在 `pages/<area>/` 根下堆单文件大组件（如单独的 `*-drawer.tsx`）；新功能优先 **`pages/<area>/<feature>/index.tsx`**。
+
+### 组件命名
+
+- 导出组件用**领域/功能语义**（如 `NewProblem`、`Compare`），**不要用纯 UI 形态**作主名称（如 `NewProblemDrawer`、`FooModal`），除非该文件就是通用底层 primitive。
+
+### 页面模块内的 Props 类型
+
+- 若该 `index.tsx` **只有一份**组件入参类型且无同名冲突，使用模块内 **`type Props = { ... }`**（**不**使用 `NewProblemProps` 这类重复前缀命名），**不必导出**，除非其它文件需要扩展该类型。
+
+### `components/` 与逻辑复用
+
+- **`components/<name>/index.ts` 只导出对外主组件**（及该组件的 props 类型若需要）。**不要**从 `components` 桶文件再导出工具函数。
+- 可复用的纯函数、数据结构解析等放在 **`web/src/utils/`**， 按领域命名（如 `test-case-rows.ts`），避免以单一动词/功能命名的过长文件名（如 `parse-test-case-rows.ts`）。
+
+### 大模型 / 接口编排
+
+- 调用命题辅助、mutation 等与 **BYOK API** 相关的编排放在 **`hooks/`**（如 `useProblemAuthoringAssist`）；表单旁只放小块 **展示组件**（如 `problem-authoring-assist-panel.tsx`），由容器或页面组合。
