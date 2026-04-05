@@ -10,6 +10,8 @@ type Props = {
   onDescriptionChange: (v: string) => void
   tags: string[]
   onTagsChange: (tags: string[]) => void
+  /** 题库已有标签，供 TagInput 快捷选择 */
+  tagSuggestions?: string[]
   functionSignature: string
   onFunctionSignatureChange: (v: string) => void
   entryPoint: string
@@ -25,6 +27,7 @@ export function ProblemFormFields({
   onDescriptionChange,
   tags,
   onTagsChange,
+  tagSuggestions,
   functionSignature,
   onFunctionSignatureChange,
   entryPoint,
@@ -86,11 +89,16 @@ export function ProblemFormFields({
         {variant === 'create' && (
           <p className="text-[11px] text-muted-foreground">
             输入后按 Enter 添加；也可用英文/中文逗号一次输入多个。
+            {(tagSuggestions?.length ?? 0) > 0 ? ' 也可从下方已有标签点选。' : ''}
           </p>
+        )}
+        {variant === 'edit' && (tagSuggestions?.length ?? 0) > 0 && (
+          <p className="text-[11px] text-muted-foreground">可从下方「已有标签」点选添加。</p>
         )}
         <TagInput
           value={tags}
           onChange={onTagsChange}
+          suggestions={tagSuggestions}
           placeholder={variant === 'create' ? '数组' : '标签'}
           aria-label="题目标签"
         />
