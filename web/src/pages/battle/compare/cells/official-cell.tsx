@@ -1,3 +1,4 @@
+import { useLayoutEffect, useRef, useState } from 'react'
 import { CopyVerifySnippetButton } from '../copy-verify-snippet-button'
 import { CompactOfficialTiming } from '../timing'
 import { PHASE_CARD_INNER_SCROLL, PHASE_CARD_OUTER } from '../../lib/battlePhaseLayout'
@@ -5,6 +6,9 @@ import type { ModelSideHook } from '../../lib/battleTypes'
 import { buildVerifySnippet } from '@/lib/copyTestHarness'
 import { prepareRunnableJavaScript } from '@/lib/stripCodeFences'
 import type { TestResult } from '@/types'
+
+/** 双列对战下每列较窄：低于此宽度用卡片布局，避免表头折行与整表横向滚动 */
+const OFFICIAL_RESULTS_TABLE_MIN_PX = 520
 
 export function OfficialCell({ hook }: { hook: ModelSideHook }) {
   const {
@@ -24,10 +28,40 @@ export function OfficialCell({ hook }: { hook: ModelSideHook }) {
     entryPoint,
   } = hook
 
+  const resultsLayoutRef = useRef<HTMLDivElement>(null)
+  const [useStackedResults, setUseStackedResults] = useState(false)
+
   const modelTimingVisible =
     !failedLlm &&
     (displayResult.phase === 'awaiting_execution' || displayResult.phase === 'completed') &&
     (displayResult.timeMs ?? 0) > 0
+
+  const officialDetails = displayResult.officialResult?.details
+  const hasOfficialDetails = Boolean(officialDetails && officialDetails.length > 0)
+
+  useLayoutEffect(() => {
+    // ref 挂在 showOfficialSection 内：若先有 details 后才展示区块（或 effect 早于 ref 提交），
+    // 仅依赖 length 不会再次运行，导致一直停留在默认 false（表格布局）。
+    if (!hasOfficialDetails || !showOfficialSection) return
+    const el = resultsLayoutRef.current
+    if (!el) return
+
+    const applyWidth = () => {
+      const w = el.getBoundingClientRect().width
+      if (w <= 0) return
+      setUseStackedResults(w < OFFICIAL_RESULTS_TABLE_MIN_PX)
+    }
+
+    const ro = new ResizeObserver(applyWidth)
+    ro.observe(el)
+    applyWidth()
+    const raf = requestAnimationFrame(applyWidth)
+
+    return () => {
+      cancelAnimationFrame(raf)
+      ro.disconnect()
+    }
+  }, [hasOfficialDetails, officialDetails?.length, showOfficialSection])
 
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-col">
@@ -98,7 +132,7 @@ export function OfficialCell({ hook }: { hook: ModelSideHook }) {
           )}
 
           {showOfficialSection && (
-            <div className="space-y-2 px-1 pt-1">
+            <div ref={resultsLayoutRef} className="min-w-0 space-y-2 px-1 pt-1">
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
                 <span>
                   <span className="text-muted-foreground">通过</span>
@@ -124,48 +158,122 @@ export function OfficialCell({ hook }: { hook: ModelSideHook }) {
                       : '暂无逐条用例表。'}
                   </p>
                 )}
-              {displayResult.officialResult?.details && displayResult.officialResult.details.length > 0 && (
-                <div className="overflow-x-auto rounded-md bg-muted/15">
-                  <table className="w-full min-w-[20rem] text-left text-xs">
-                    <thead className="border-b border-border/70 bg-muted/40 font-medium text-muted-foreground">
-                      <tr>
-                        <th className="px-2 py-1.5 w-10">#</th>
-                        <th className="px-2 py-1.5">输入</th>
-                        <th className="px-2 py-1.5">期望</th>
-                        <th className="px-2 py-1.5">实际</th>
-                        <th className="px-2 py-1.5 w-12">结果</th>
-                        <th className="px-2 py-1.5 w-[5rem] shrink-0">验证</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-border">
-                      {displayResult.officialResult.details.map((row: TestResult, idx: number) => {
+              {officialDetails && officialDetails.length > 0 && (
+                <>
+                  {!useStackedResults && (
+                    <div className="overflow-x-auto rounded-md bg-muted/15">
+                      <table className="w-full min-w-0 table-fixed text-left text-xs">
+                        <colgroup>
+                          <col className="w-10" />
+                          <col />
+                          <col />
+                          <col />
+                          <col className="w-12" />
+                          <col className="w-[5.5rem]" />
+                        </colgroup>
+                        <thead className="border-b border-border/70 bg-muted/40 font-medium text-muted-foreground">
+                          <tr>
+                            <th className="whitespace-nowrap px-2 py-1.5 align-middle">#</th>
+                            <th className="whitespace-nowrap px-2 py-1.5 align-middle">输入</th>
+                            <th className="whitespace-nowrap px-2 py-1.5 align-middle">期望</th>
+                            <th className="whitespace-nowrap px-2 py-1.5 align-middle">实际</th>
+                            <th className="whitespace-nowrap px-2 py-1.5 align-middle">结果</th>
+                            <th className="whitespace-nowrap px-2 py-1.5 align-middle">验证</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-border">
+                          {officialDetails.map((row: TestResult, idx: number) => {
+                            const codeBody = prepareRunnableJavaScript(displayResult.code ?? '')
+                            return (
+                              <tr key={row.testCaseId} className="bg-background/50">
+                                <td className="px-2 py-1.5 font-mono text-muted-foreground">{idx + 1}</td>
+                                <td className="break-all px-2 py-1.5 font-mono text-foreground">{row.input}</td>
+                                <td className="break-all px-2 py-1.5 font-mono text-foreground">
+                                  {row.expectedOutput}
+                                </td>
+                                <td className="break-all px-2 py-1.5 font-mono text-foreground">
+                                  {row.actualOutput}
+                                </td>
+                                <td className="px-2 py-1.5">
+                                  {row.passed ? (
+                                    <span className="text-emerald-600 dark:text-emerald-400">✓</span>
+                                  ) : (
+                                    <span className="text-red-600 dark:text-red-400">✗</span>
+                                  )}
+                                </td>
+                                <td className="px-2 py-1.5 align-middle">
+                                  <CopyVerifySnippetButton
+                                    text={buildVerifySnippet(
+                                      codeBody,
+                                      row.input,
+                                      entryPoint,
+                                      row.expectedOutput,
+                                    )}
+                                    disabled={!codeBody.trim()}
+                                    label="复制"
+                                  />
+                                </td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                  {useStackedResults && (
+                    <ul className="space-y-2">
+                      {officialDetails.map((row: TestResult, idx: number) => {
                         const codeBody = prepareRunnableJavaScript(displayResult.code ?? '')
                         return (
-                          <tr key={row.testCaseId} className="bg-background/50">
-                            <td className="px-2 py-1.5 font-mono text-muted-foreground">{idx + 1}</td>
-                            <td className="px-2 py-1.5 font-mono text-foreground">{row.input}</td>
-                            <td className="px-2 py-1.5 font-mono text-foreground">{row.expectedOutput}</td>
-                            <td className="px-2 py-1.5 font-mono text-foreground">{row.actualOutput}</td>
-                            <td className="px-2 py-1.5">
-                              {row.passed ? (
-                                <span className="text-emerald-600 dark:text-emerald-400">✓</span>
-                              ) : (
-                                <span className="text-red-600 dark:text-red-400">✗</span>
-                              )}
-                            </td>
-                            <td className="px-2 py-1.5 align-middle">
-                              <CopyVerifySnippetButton
-                                text={buildVerifySnippet(codeBody, row.input, entryPoint, row.expectedOutput)}
-                                disabled={!codeBody.trim()}
-                                label="复制"
-                              />
-                            </td>
-                          </tr>
+                          <li
+                            key={row.testCaseId}
+                            className="space-y-2 rounded-md border border-border/60 bg-muted/15 p-2 text-xs"
+                          >
+                            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/50 pb-2">
+                              <span className="font-mono text-muted-foreground">#{idx + 1}</span>
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className="text-muted-foreground">结果</span>
+                                {row.passed ? (
+                                  <span className="text-emerald-600 dark:text-emerald-400">✓</span>
+                                ) : (
+                                  <span className="text-red-600 dark:text-red-400">✗</span>
+                                )}
+                                <CopyVerifySnippetButton
+                                  text={buildVerifySnippet(
+                                    codeBody,
+                                    row.input,
+                                    entryPoint,
+                                    row.expectedOutput,
+                                  )}
+                                  disabled={!codeBody.trim()}
+                                  label="复制"
+                                />
+                              </div>
+                            </div>
+                            <div className="space-y-0.5">
+                              <div className="text-[11px] font-medium text-muted-foreground">输入</div>
+                              <div className="break-all font-mono text-foreground">{row.input}</div>
+                            </div>
+                            <div className="grid min-w-0 grid-cols-2 gap-x-2 gap-y-1 border-t border-border/40 pt-2">
+                              <div className="min-w-0 space-y-0.5">
+                                <div className="text-[11px] font-medium text-muted-foreground">期望</div>
+                                <div className="break-words break-all font-mono text-foreground">
+                                  {row.expectedOutput}
+                                </div>
+                              </div>
+                              <div className="min-w-0 space-y-0.5">
+                                <div className="text-[11px] font-medium text-muted-foreground">实际</div>
+                                <div className="break-words break-all font-mono text-foreground">
+                                  {row.actualOutput}
+                                </div>
+                              </div>
+                            </div>
+                          </li>
                         )
                       })}
-                    </tbody>
-                  </table>
-                </div>
+                    </ul>
+                  )}
+                </>
               )}
             </div>
           )}
