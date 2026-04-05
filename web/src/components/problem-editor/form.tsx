@@ -1,8 +1,13 @@
 import { useState, useEffect, useRef } from 'react'
 import { Plus, Trash2, X } from 'lucide-react'
-import { useSuggestProblemAuthoring } from '@/hooks/useApi'
 import { useProblemAuthoringAssist } from '@/hooks/useProblemAuthoringAssist'
-import type { GradingMode, PlatformModel, Problem, TestCase } from '@/types'
+import type {
+  GradingMode,
+  PlatformModel,
+  Problem,
+  ProblemAuthoringResponse,
+  TestCase,
+} from '@/types'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { parseRowsToTestCases, type TestCaseRow } from '@/utils/test-case-rows'
@@ -128,6 +133,7 @@ export function ProblemEditorForm({
   const [functionSignature, setFunctionSignature] = useState('')
   const [entryPoint, setEntryPoint] = useState('')
   const [gradingMode, setGradingMode] = useState<GradingMode>('expected')
+  const [enforceFormGradingInAssist, setEnforceFormGradingInAssist] = useState(false)
   const [verifySource, setVerifySource] = useState('')
   const [rows, setRows] = useState<ProblemEditorRow[]>([])
   const [initialTc, setInitialTc] = useState<Map<string, { data: string; ans: string }>>(new Map())
@@ -137,7 +143,6 @@ export function ProblemEditorForm({
 
   const { authorModelId, setAuthorModelId, suggestPending, requestSuggest } =
     useProblemAuthoringAssist(defaultModelId)
-  const suggest = useSuggestProblemAuthoring()
 
   const resetKey =
     mode === 'edit' && detail && problemId
@@ -156,6 +161,7 @@ export function ProblemEditorForm({
       setFunctionSignature('')
       setEntryPoint('')
       setGradingMode('expected')
+      setEnforceFormGradingInAssist(false)
       setVerifySource('')
       setRows([])
       setInitialTc(new Map())
@@ -173,6 +179,7 @@ export function ProblemEditorForm({
     setFunctionSignature(p.functionSignature)
     setEntryPoint(p.entryPoint)
     setGradingMode(p.gradingMode ?? 'expected')
+    setEnforceFormGradingInAssist(false)
     setVerifySource(p.verifySource?.trim() ?? '')
     setError(null)
     setLlmNote(null)
@@ -198,6 +205,16 @@ export function ProblemEditorForm({
   const assistHintCreate =
     '每条用例：测试输入为 JSON 数组；标准答案模式再填标准答案。留空行保存时跳过；也可先不填再用大模型辅助。'
 
+  const applyAuthoringGradingFields = (data: ProblemAuthoringResponse) => {
+    setEntryPoint(data.entryPoint)
+    setGradingMode(data.gradingMode)
+    if (data.gradingMode === 'verify') {
+      setVerifySource(typeof data.verifySource === 'string' ? data.verifySource : '')
+    } else {
+      setVerifySource('')
+    }
+  }
+
   const handleSuggestCreate = () => {
     requestSuggest({
       title,
@@ -205,18 +222,14 @@ export function ProblemEditorForm({
       functionSignature,
       tags,
       testCaseRows: rowsToTestCaseRows(rows),
+      gradingMode,
+      enforceFormGradingMode: enforceFormGradingInAssist,
       setError,
       setLlmNote,
       onSuccess: (data) => {
         if (data.title?.trim()) setTitle(data.title.trim())
         if (data.functionSignature?.trim()) setFunctionSignature(data.functionSignature.trim())
-        setEntryPoint(data.entryPoint)
-        setGradingMode(data.gradingMode)
-        if (data.gradingMode === 'verify') {
-          setVerifySource(data.verifySource ?? '')
-        } else {
-          setVerifySource('')
-        }
+        applyAuthoringGradingFields(data)
         setRows(
           data.testCases.map((t) => ({
             key: `new-${crypto.randomUUID()}`,
@@ -232,75 +245,49 @@ export function ProblemEditorForm({
   }
 
   const handleSuggestEdit = () => {
-    setError(null)
-    setLlmNote(null)
-    const active = rows.filter((r) => !r.deleted)
-    let testCasesData: unknown[][]
-    try {
-      testCasesData = []
-      for (let i = 0; i < active.length; i++) {
-        const s = active[i].data.trim()
-        if (!s) continue
-        const v = JSON.parse(s) as unknown
-        if (!Array.isArray(v)) {
-          throw new Error(`用例 ${i + 1}：测试输入须为 JSON 数组`)
+    requestSuggest({
+      title,
+      description,
+      functionSignature,
+      tags,
+      testCaseRows: rowsToTestCaseRows(rows),
+      gradingMode,
+      enforceFormGradingMode: enforceFormGradingInAssist,
+      setError,
+      setLlmNote,
+      onSuccess: (data) => {
+        applyAuthoringGradingFields(data)
+        if (data.title?.trim()) setTitle(data.title.trim())
+        if (data.functionSignature?.trim()) setFunctionSignature(data.functionSignature.trim())
+
+        const existing = new Set<string>()
+        for (const r of rows) {
+          if (r.deleted) continue
+          const k = normalizeDataKey(r.data)
+          if (k) existing.add(k)
         }
-        testCasesData.push(v)
-      }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : '用例 JSON 无效')
-      return
-    }
-    if (!description.trim() && !title.trim()) {
-      setError('请先填写题目描述或标题')
-      return
-    }
-    suggest.mutate(
-      {
-        title: title.trim() || undefined,
-        description: description.trim() || undefined,
-        functionSignature: functionSignature.trim() || undefined,
-        testCasesData,
-        tags,
-        modelId: authorModelId,
+        const toAdd: ProblemEditorRow[] = []
+        for (const t of data.testCases) {
+          const k = JSON.stringify(t.data)
+          if (existing.has(k)) continue
+          existing.add(k)
+          toAdd.push({
+            key: `new-${crypto.randomUUID()}`,
+            data: JSON.stringify(t.data),
+            ans:
+              data.gradingMode === 'expected' && t.ans !== undefined
+                ? JSON.stringify(t.ans)
+                : '',
+          })
+        }
+        if (toAdd.length === 0) {
+          setLlmNote(data.reasoning?.trim() || '模型未返回新的用例（可能与现有重复）。')
+        } else {
+          setRows((prev) => [...prev, ...toAdd])
+          setLlmNote(data.reasoning?.trim() || `已追加 ${toAdd.length} 条用例，请核对后再保存。`)
+        }
       },
-      {
-        onSuccess: (data) => {
-          const existing = new Set<string>()
-          for (const r of rows) {
-            if (r.deleted) continue
-            const k = normalizeDataKey(r.data)
-            if (k) existing.add(k)
-          }
-          const toAdd: ProblemEditorRow[] = []
-          for (const t of data.testCases) {
-            const k = JSON.stringify(t.data)
-            if (existing.has(k)) continue
-            existing.add(k)
-            toAdd.push({
-              key: `new-${crypto.randomUUID()}`,
-              data: JSON.stringify(t.data),
-              ans:
-                gradingMode === 'expected' && t.ans !== undefined
-                  ? JSON.stringify(t.ans)
-                  : '',
-            })
-          }
-          if (toAdd.length === 0) {
-            setLlmNote(data.reasoning?.trim() || '模型未返回新的用例（可能与现有重复）。')
-          } else {
-            setRows((prev) => [...prev, ...toAdd])
-            setLlmNote(
-              data.reasoning?.trim() || `已追加 ${toAdd.length} 条用例，请核对后再保存。`,
-            )
-          }
-        },
-        onError: (e) => {
-          const msg = e instanceof Error ? e.message : 'LLM 调用失败'
-          setError(`${msg}（可检查网络与 API 配置。）`)
-        },
-      },
-    )
+    })
   }
 
   const addRow = () => {
@@ -617,8 +604,10 @@ export function ProblemEditorForm({
               models={models}
               authorModelId={authorModelId}
               onAuthorModelIdChange={setAuthorModelId}
+              enforceFormGradingMode={enforceFormGradingInAssist}
+              onEnforceFormGradingModeChange={setEnforceFormGradingInAssist}
               onSuggest={mode === 'create' ? handleSuggestCreate : handleSuggestEdit}
-              pending={mode === 'create' ? suggestPending : suggest.isPending}
+              pending={suggestPending}
             />
           </>
         )}

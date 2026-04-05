@@ -71,6 +71,9 @@ problemsRouter.post('/authoring', async (c) => {
     description?: string
     tags?: string[]
     modelId?: string
+    /** 为 true 时命题辅助必须采用 formGradingMode。 */
+    enforceFormGradingMode?: boolean
+    formGradingMode?: 'expected' | 'verify'
   }
 
   if (!body.description?.trim() && !body.title?.trim()) {
@@ -93,6 +96,10 @@ problemsRouter.post('/authoring', async (c) => {
   const provider = modelProviderFromModelId(modelId)
 
   try {
+    const enforceFormGradingMode = body.enforceFormGradingMode === true
+    const formGradingMode: 'expected' | 'verify' =
+      body.formGradingMode === 'verify' ? 'verify' : 'expected'
+
     const parsed = await generateProblemAuthoring(
       provider,
       modelId,
@@ -102,6 +109,8 @@ problemsRouter.post('/authoring', async (c) => {
         functionSignature: body.functionSignature?.trim() || undefined,
         testCasesData: testCasesData as unknown[][],
         tags: body.tags,
+        formGradingMode,
+        enforceFormGradingMode,
       },
       { source: 'problem_authoring', sourceId: null },
     )

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useSuggestProblemAuthoring } from '@/hooks/useApi'
-import type { ProblemAuthoringResponse } from '@/types'
+import type { GradingMode, ProblemAuthoringResponse } from '@/types'
 import { parseRowsToTestCases, type TestCaseRow } from '@/utils/test-case-rows'
 
 /**
@@ -22,6 +22,9 @@ export function useProblemAuthoringAssist(defaultModelId: string) {
       functionSignature: string
       tags: string[]
       testCaseRows: TestCaseRow[]
+      gradingMode: GradingMode
+      /** 勾选「自动选择判题类型」时为 true：辅助必须采用表单中的判题方式。 */
+      enforceFormGradingMode: boolean
       setError: (msg: string | null) => void
       setLlmNote: (msg: string | null) => void
       onSuccess: (data: ProblemAuthoringResponse) => void
@@ -47,6 +50,8 @@ export function useProblemAuthoringAssist(defaultModelId: string) {
           testCasesData,
           tags: input.tags,
           modelId: authorModelId,
+          formGradingMode: input.gradingMode,
+          enforceFormGradingMode: input.enforceFormGradingMode,
         },
         {
           onSuccess: (data) => {

@@ -102,6 +102,10 @@ export const api = {
     testCasesData?: unknown[][]
     tags?: string[]
     modelId?: string
+    /** 当前表单判题方式（与是否强制无关，便于服务端与调试）。 */
+    formGradingMode?: import('../types').GradingMode
+    /** 为 true 时辅助输出必须采用 formGradingMode。 */
+    enforceFormGradingMode?: boolean
   }): Promise<import('../types').ProblemAuthoringResponse> {
     const res = await apiFetch(`${API_BASE}/problems/authoring`, {
       method: 'POST',
