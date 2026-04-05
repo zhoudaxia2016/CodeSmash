@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import { initDb } from './db/schema.ts'
 import { corsAllowedFrontends } from './middleware/cors.ts'
 import { rateLimit } from './middleware/rateLimit.ts'
+import { safeMutatingRequests } from './middleware/safeMutating.ts'
 import { adminRouter } from './routes/admin.ts'
 import { authRouter } from './routes/auth.ts'
 import { battleResultsRouter } from './routes/battleResults.ts'
@@ -20,6 +21,7 @@ app.get('/', (c) => c.json({ status: 'ok', service: 'codesmash-api' }))
 const api = new Hono()
 
 api.use('*', corsAllowedFrontends)
+api.use('*', safeMutatingRequests)
 
 api.route('/auth', authRouter)
 api.route('/admin', adminRouter)

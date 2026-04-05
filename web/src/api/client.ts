@@ -5,7 +5,15 @@ const rawApiOrigin =
 const API_BASE = rawApiOrigin ? `${rawApiOrigin}/api` : '/api'
 
 function apiFetch(path: string, init?: RequestInit): Promise<Response> {
-  return fetch(path, { ...init, credentials: 'include' })
+  const method = (init?.method ?? 'GET').toUpperCase()
+  const headers = new Headers(init?.headers)
+  if (
+    (method === 'POST' || method === 'PATCH' || method === 'PUT') &&
+    !headers.has('Content-Type')
+  ) {
+    headers.set('Content-Type', 'application/json')
+  }
+  return fetch(path, { ...init, credentials: 'include', headers })
 }
 
 async function handleResponse<T>(response: Response): Promise<T> {
