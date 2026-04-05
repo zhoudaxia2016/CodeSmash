@@ -11,7 +11,7 @@ type MainView = 'battle' | 'problems' | 'leaderboard' | 'admin'
 type AdminTab = 'models' | 'logs'
 
 function githubLoginHref(): string {
-  const apiBase = import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, '') ?? ''
+  const apiBase = import.meta.env.VITE_API_URL?.trim().replace(/\/$/, '') ?? ''
   const postLogin = window.location.href.split('#')[0]
   if (apiBase) {
     return `${apiBase}/api/auth/github?post_login=${encodeURIComponent(postLogin)}`
