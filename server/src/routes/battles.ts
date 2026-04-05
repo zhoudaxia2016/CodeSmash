@@ -1,6 +1,15 @@
 import { Hono } from 'hono'
-import { prepareRunnableJavaScript, streamProblemAnalysis, streamProblemCode } from '../lib/llm.ts'
-import { sanitizeModelThoughtMarkdown, splitThinkingFromModelCode } from '../lib/codePhaseSplit.ts'
+import {
+  finalizeRunnableFromCodeOnly,
+  streamProblemAnalysis,
+  streamProblemCode,
+} from '../lib/llm.ts'
+import {
+  mergeReasoningAndXmlCodingThought,
+  sanitizeModelThoughtMarkdown,
+  splitThinkingFromModelCode,
+  THINKING_OPEN_TAG_RE,
+} from '../lib/codePhaseSplit.ts'
 import { loadProblemForBattle } from './problems.ts'
 
 const battlesRouter = new Hono()
@@ -142,21 +151,38 @@ async function runSide(
 
     merge({ phase: 'coding', thought })
     const tCode0 = Date.now()
-    let codeRaw = ''
-    for await (const d of streamProblemCode(provider, modelId, problem, thought, {
+    let reasoningBuf = ''
+    let contentBuf = ''
+    for await (const part of streamProblemCode(provider, modelId, problem, thought, {
       logLabel: llmLog,
       source: 'battle_code',
       sourceId: battleId,
     })) {
-      codeRaw += d
-      const { thinking } = splitThinkingFromModelCode(codeRaw)
-      const runnable = prepareRunnableJavaScript(codeRaw)
-      merge({ codingThought: thinking, code: runnable, phase: 'coding' })
+      if (part.kind === 'reasoning') reasoningBuf += part.text
+      else contentBuf += part.text
+      // 流式不做 XML 解析：一旦出现开标签，整段 content 暂存为 codingThought；否则整段暂存为 code。
+      THINKING_OPEN_TAG_RE.lastIndex = 0
+      const sawRedactedOpen = THINKING_OPEN_TAG_RE.test(contentBuf)
+      if (sawRedactedOpen) {
+        merge({
+          codingThought: mergeReasoningAndXmlCodingThought(reasoningBuf, contentBuf.trim()),
+          code: '',
+          phase: 'coding',
+        })
+      } else {
+        merge({
+          codingThought: mergeReasoningAndXmlCodingThought(reasoningBuf, ''),
+          code: contentBuf.trim(),
+          phase: 'coding',
+        })
+      }
     }
     codingTimeMs = Date.now() - tCode0
 
-    const { thinking: finalCodingThought } = splitThinkingFromModelCode(codeRaw)
-    const runnable = prepareRunnableJavaScript(codeRaw)
+    // 代码流结束后仅此一处做 split + 围栏/结构化清洗；客户端执行不再解析。
+    const { thinking: finalXmlThink, code: finalCodeOnly } = splitThinkingFromModelCode(contentBuf)
+    const finalCodingThought = mergeReasoningAndXmlCodingThought(reasoningBuf, finalXmlThink)
+    const runnable = finalizeRunnableFromCodeOnly(finalCodeOnly)
     const modelOutputMs = analysisTimeMs + codingTimeMs
     merge({
       phase: 'awaiting_execution',

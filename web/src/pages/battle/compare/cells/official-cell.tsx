@@ -4,7 +4,6 @@ import { CompactOfficialTiming } from '../timing'
 import { PHASE_CARD_INNER_SCROLL, PHASE_CARD_OUTER } from '../../lib/battlePhaseLayout'
 import type { ModelSideHook } from '../../lib/battleTypes'
 import { buildVerifySnippet } from '@/lib/copyTestHarness'
-import { prepareRunnableJavaScript } from '@/lib/stripCodeFences'
 import type { TestResult } from '@/types'
 
 /** 双列对战下每列较窄：低于此宽度用卡片布局，避免表头折行与整表横向滚动 */
@@ -183,7 +182,7 @@ export function OfficialCell({ hook }: { hook: ModelSideHook }) {
                         </thead>
                         <tbody className="divide-y divide-border">
                           {officialDetails.map((row: TestResult, idx: number) => {
-                            const codeBody = prepareRunnableJavaScript(displayResult.code ?? '')
+                            const codeBody = (displayResult.code ?? '').trim()
                             return (
                               <tr key={row.testCaseId} className="bg-background/50">
                                 <td className="px-2 py-1.5 font-mono text-muted-foreground">{idx + 1}</td>
@@ -223,7 +222,7 @@ export function OfficialCell({ hook }: { hook: ModelSideHook }) {
                   {useStackedResults && (
                     <ul className="space-y-2">
                       {officialDetails.map((row: TestResult, idx: number) => {
-                        const codeBody = prepareRunnableJavaScript(displayResult.code ?? '')
+                        const codeBody = (displayResult.code ?? '').trim()
                         return (
                           <li
                             key={row.testCaseId}

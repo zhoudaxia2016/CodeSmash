@@ -1,121 +1,82 @@
 /**
- * Same heuristics as web `stripCodeFences.ts`: split code-phase stream into
- * human-readable thinking vs JS body (before prepareRunnableJavaScript).
+ * 代码阶段：从 content 里抽出各模型常见的「思考」XML 块，余下为 code。
+ * - `splitThinkingFromModelCode`：按开标签在串中最先出现顺序依次抠块（非贪婪到对应闭标签）。
+ * - 流式：`battles` 用 `THINKING_OPEN_TAG_RE` 判断是否已进入思考区，不在此做块级解析。
+ * 新增厂商标签时只改 `THINKING_TAGS`（并与 `web/src/lib/stripCodeFences.ts` 同步）。
  */
 
-const XML_THINKING_INNER: string[] = [
-  '<redacted_thinking>([\\s\\S]*?)</redacted_thinking>',
-  '<thinking>([\\s\\S]*?)</thinking>',
-]
+export type ThinkingTagSpec = { readonly openName: string; readonly closeTag?: string }
+
+/** 闭标签字符串。仅当开闭「本地名」不一致时写 `closeTag`（如 Qwen：`<think>` → `</redacted_thinking>`）。 */
+export function thinkingCloseLiteral(spec: ThinkingTagSpec): string {
+  return `</${spec.closeTag ?? spec.openName}>`
+}
+
+export const THINKING_TAGS: readonly ThinkingTagSpec[] = [
+  { openName: 'redacted_thinking' },
+  { openName: 'thinking' },
+  { openName: 'think' },
+  { openName: 'reasoning' },
+  { openName: 'thought' },
+] as const
+
+/** 任一思考开标签（可带属性）——流式时用于「整段先当 codingThought」。 */
+export const THINKING_OPEN_TAG_RE =
+  /<(redacted_thinking|thinking|think|reasoning|thought)\b[^>]*>/i
+
+function findEarliestThinkingOpen(s: string): {
+  start: number
+  openLen: number
+  closeLiteral: string
+} | null {
+  let best: { start: number; openLen: number; closeLiteral: string } | null = null
+  for (const spec of THINKING_TAGS) {
+    const { openName } = spec
+    const re = new RegExp(`<${openName}\\b[^>]*>`, 'i')
+    const m = re.exec(s)
+    if (!m || m.index === undefined) continue
+    const closeLiteral = thinkingCloseLiteral(spec)
+    if (!best || m.index < best.start) {
+      best = { start: m.index, openLen: m[0].length, closeLiteral }
+    }
+  }
+  return best
+}
+
+/** 分析阶段等：只做空白整理。 */
+export function sanitizeModelThoughtMarkdown(s: string): string {
+  return s.replace(/\n{3,}/g, '\n\n').trim()
+}
 
 /**
- * Stream chunk may end inside `<redacted_thinking>` before `</…>` arrives.
- * Peel that tail into `parts` so it is not treated as runnable code.
- * If `function main` or a ``` fence appears inside the tail, split there.
+ * 捕获的各块 inner 拼成 codingThought，去掉所有块后余下为 code。
  */
-function peelOpenTagWithoutClose(
-  s: string,
-  open: string,
-  close: string,
-  parts: string[],
-): string {
-  const lc = s.toLowerCase()
-  const oi = lc.lastIndexOf(open.toLowerCase())
-  if (oi < 0) return s
-  const afterOpen = oi + open.length
-  if (s.toLowerCase().indexOf(close.toLowerCase(), afterOpen) >= 0) return s
-
-  let inner = s.slice(afterOpen)
-  const codeStart = inner.search(/(?:^|\n)\s*function\s+main\b/)
-  if (codeStart >= 0) {
-    const think = inner.slice(0, codeStart).trim()
-    const codeRest = inner.slice(codeStart).trimStart()
-    if (think) parts.push(think)
-    return s.slice(0, oi) + codeRest
-  }
-  const fenceStart = inner.search(/(?:^|\n)\s*```(?:javascript|js)?\b/)
-  if (fenceStart >= 0) {
-    const think = inner.slice(0, fenceStart).trim()
-    const codeRest = inner.slice(fenceStart)
-    if (think) parts.push(think)
-    return s.slice(0, oi) + codeRest
-  }
-  const t = inner.trim()
-  if (t) parts.push(t)
-  return s.slice(0, oi)
-}
-
-function peelAllUnclosedThinking(s: string, parts: string[]): string {
-  let out = s
-  out = peelOpenTagWithoutClose(out, '<redacted_thinking>', '</redacted_thinking>', parts)
-  out = peelOpenTagWithoutClose(out, '<thinking>', '</thinking>', parts)
-  return out
-}
-
-function removeLeakedThinkingMarkers(s: string): string {
-  return s
-    .replace(/<\/redacted_thinking>/gi, '\n')
-    .replace(/<redacted_thinking>/gi, '\n')
-    .replace(/<\/thinking>/gi, '\n')
-    .replace(/<thinking>/gi, '\n')
-}
-
-/** Strip XML-style thinking wrappers (analysis + code-phase thinking for markdown UI). */
-export function sanitizeModelThoughtMarkdown(s: string): string {
-  let t = s
-  t = t.replace(/<redacted_thinking>([\s\S]*?)<\/redacted_thinking>/gi, '$1')
-  t = t.replace(/<thinking>([\s\S]*?)<\/thinking>/gi, '$1')
-  t = removeLeakedThinkingMarkers(t)
-  return t.replace(/\n{3,}/g, '\n\n').trim()
-}
-
-function extractLastMainBlock(s: string): { prefix: string; code: string } {
-  const re = /^function\s+main\b/gm
-  const idx: number[] = []
-  let m: RegExpExecArray | null
-  const r = new RegExp(re.source, 'gm')
-  while ((m = r.exec(s)) !== null) idx.push(m.index)
-  if (idx.length < 2) return { prefix: '', code: s }
-  const start = idx[idx.length - 1]!
-  return { prefix: s.slice(0, start).trim(), code: s.slice(start).trim() }
-}
-
-function splitLeadingProseBeforeFence(s: string): { prose: string; rest: string } {
-  const trimmed = s.replace(/\n{3,}/g, '\n\n').trim()
-  const idx = trimmed.search(/```(?:javascript|js)?/)
-  if (idx <= 0) return { prose: '', rest: trimmed }
-  const prose = trimmed.slice(0, idx).trim()
-  const fromFence = trimmed.slice(idx)
-  const closed = fromFence.match(/^```(?:javascript|js)?\s*([\s\S]*?)```/)
-  if (closed) {
-    const inner = closed[1].trim()
-    const tail = fromFence.slice(closed[0].length).trim()
-    const code = tail ? `${inner}\n\n${tail}` : inner
-    return { prose, rest: code }
-  }
-  const open = fromFence.match(/^```(?:javascript|js)?\s*\n?([\s\S]*)$/)
-  if (open) return { prose, rest: open[1].trim() }
-  return { prose: '', rest: trimmed }
-}
-
 export function splitThinkingFromModelCode(raw: string): { thinking: string; code: string } {
   const parts: string[] = []
-  let s = peelAllUnclosedThinking(raw, parts)
-  for (const body of XML_THINKING_INNER) {
-    const re = new RegExp(body, 'gi')
-    s = s.replace(re, (_m, inner: string) => {
-      const t = inner.trim()
-      if (t) parts.push(t)
-      return '\n'
-    })
+  let s = raw
+  while (true) {
+    const op = findEarliestThinkingOpen(s)
+    if (!op) break
+    const afterOpen = op.start + op.openLen
+    const closeIdx = s.toLowerCase().indexOf(op.closeLiteral.toLowerCase(), afterOpen)
+    if (closeIdx < 0) {
+      // MiniMax 等可能流式结束仍未输出 </…>：开标签后的整段视为思考，避免 code 里残留半截 XML
+      const inner = s.slice(afterOpen).trim()
+      if (inner) parts.push(inner)
+      s = s.slice(0, op.start)
+      break
+    }
+    const inner = s.slice(afterOpen, closeIdx).trim()
+    if (inner) parts.push(inner)
+    s = s.slice(0, op.start) + '\n' + s.slice(closeIdx + op.closeLiteral.length)
   }
-  s = removeLeakedThinkingMarkers(s).replace(/\n{3,}/g, '\n\n').trim()
-  const { prose, rest } = splitLeadingProseBeforeFence(s)
-  if (prose) parts.push(prose)
-  const { prefix, code: lastMain } = extractLastMainBlock(rest.trim())
-  if (prefix) parts.push(prefix)
   return {
-    thinking: sanitizeModelThoughtMarkdown(parts.join('\n\n───\n\n')),
-    code: lastMain.trim(),
+    thinking: parts.join('\n\n───\n\n').trim(),
+    code: s.replace(/\n{3,}/g, '\n\n').trim(),
   }
+}
+
+/** API reasoning 通道 + 从 content 解析出的 XML 思考文本。 */
+export function mergeReasoningAndXmlCodingThought(reasoning: string, xmlThinking: string): string {
+  return [reasoning.trim(), xmlThinking.trim()].filter(Boolean).join('\n\n───\n\n').replace(/\n{3,}/g, '\n\n').trim()
 }

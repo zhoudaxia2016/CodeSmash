@@ -38,6 +38,39 @@ async function migrateDropTestCaseEnabled(client: Client): Promise<void> {
   }
 }
 
+/** `output_text` → `output_json` (structured delta log); existing DBs get new column via ALTER. */
+async function migrateLlmCallLogsOutputJson(client: Client): Promise<void> {
+  try {
+    const res = await client.execute({ sql: 'PRAGMA table_info(llm_call_logs)', args: [] })
+    const names = new Set(
+      res.rows.map((row) => String((row as Record<string, unknown>).name)),
+    )
+    if (names.has('output_json')) return
+    await client.execute({
+      sql: 'ALTER TABLE llm_call_logs ADD COLUMN output_json TEXT',
+      args: [],
+    })
+    console.log('[db] migration: added llm_call_logs.output_json')
+  } catch (e) {
+    console.warn('[db] migration: llm_call_logs.output_json failed', e)
+  }
+}
+
+/** Legacy `output_text` removed — logs use `output_json` only. */
+async function migrateLlmCallLogsDropOutputText(client: Client): Promise<void> {
+  try {
+    const res = await client.execute({ sql: 'PRAGMA table_info(llm_call_logs)', args: [] })
+    const names = new Set(
+      res.rows.map((row) => String((row as Record<string, unknown>).name)),
+    )
+    if (!names.has('output_text')) return
+    await client.execute({ sql: 'ALTER TABLE llm_call_logs DROP COLUMN output_text', args: [] })
+    console.log('[db] migration: dropped llm_call_logs.output_text')
+  } catch (e) {
+    console.warn('[db] migration: llm_call_logs.output_text drop failed', e)
+  }
+}
+
 /** Drop unused `source` / `sort_order`; list order uses SQLite rowid (insertion order). */
 async function migrateStripTestCaseSourceAndSort(client: Client): Promise<void> {
   try {
@@ -92,7 +125,7 @@ export async function initDb(): Promise<void> {
   provider TEXT NOT NULL,
   model TEXT NOT NULL,
   messages TEXT NOT NULL,
-  output_text TEXT,
+  output_json TEXT,
   error TEXT,
   duration_ms INTEGER NOT NULL
 )`,
@@ -150,6 +183,8 @@ export async function initDb(): Promise<void> {
   await migrateDropProblemDifficulty(client)
   await migrateDropTestCaseEnabled(client)
   await migrateStripTestCaseSourceAndSort(client)
+  await migrateLlmCallLogsOutputJson(client)
+  await migrateLlmCallLogsDropOutputText(client)
 
   await seedProblemsIfEmpty(client)
 

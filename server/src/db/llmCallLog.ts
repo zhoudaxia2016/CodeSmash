@@ -9,6 +9,19 @@ export type LlmCallSource =
   | 'problem_authoring'
   | 'other'
 
+/**
+ * Merged model output for one request. String fields concatenate all SSE deltas (or one non-stream message).
+ * `reasoning_details` is the concatenation of every `reasoning_details[].text` in order.
+ */
+export type LlmCallOutputJson = {
+  mode: 'stream' | 'complete'
+  reasoning_content?: string
+  reasoning_details?: string
+  thinking?: string
+  content?: string
+  truncated?: boolean
+}
+
 export type LlmCallLogRow = {
   id: string
   created_at: string
@@ -18,7 +31,7 @@ export type LlmCallLogRow = {
   provider: 'minimax' | 'deepseek'
   model: string
   messages: string
-  output_text: string | null
+  output_json: string | null
   error: string | null
   duration_ms: number
 }
@@ -81,10 +94,49 @@ export function truncateOutputForDb(text: string, maxChars: number): string {
   return text.slice(0, Math.max(0, maxChars - 24)) + '\n…[truncated]'
 }
 
+/** Fit merged LLM output JSON under DB size cap by shortening string fields. */
+export function serializeLlmOutputJsonForDb(output: LlmCallOutputJson, maxChars: number): string {
+  const cut = (s: string, maxLen: number): string =>
+    s.length <= maxLen ? s : s.slice(0, Math.max(0, maxLen - 24)) + '\n…[truncated]'
+
+  const fields = ['content', 'reasoning_content', 'reasoning_details', 'thinking'] as const
+  const clone = (): LlmCallOutputJson => ({
+    mode: output.mode,
+    ...(output.reasoning_content != null ? { reasoning_content: output.reasoning_content } : {}),
+    ...(output.reasoning_details != null ? { reasoning_details: output.reasoning_details } : {}),
+    ...(output.thinking != null ? { thinking: output.thinking } : {}),
+    ...(output.content != null ? { content: output.content } : {}),
+  })
+
+  let payload = clone()
+  const rec = () => payload as Record<string, unknown>
+  let fieldShrink = 1
+  for (let guard = 0; guard < 10_000; guard++) {
+    const s = JSON.stringify(payload)
+    if (s.length <= maxChars) return s
+
+    const maxField = Math.max(64, Math.floor((maxChars / 4) * fieldShrink))
+    fieldShrink *= 0.85
+    payload.truncated = true
+    for (const k of fields) {
+      const v = payload[k]
+      if (typeof v === 'string' && v.length > 0) {
+        rec()[k] = cut(v, maxField)
+      }
+    }
+  }
+
+  return JSON.stringify({
+    mode: output.mode,
+    truncated: true,
+    error: 'output exceeded LLM_LOG_DB_MAX_OUTPUT_CHARS',
+  })
+}
+
 export async function insertLlmCallLog(client: Client, row: LlmCallLogRow): Promise<void> {
   await client.execute({
     sql: `INSERT INTO llm_call_logs (
-  id, created_at, completed_at, source, source_id, provider, model, messages, output_text, error, duration_ms
+  id, created_at, completed_at, source, source_id, provider, model, messages, output_json, error, duration_ms
 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     args: [
       row.id,
@@ -95,7 +147,7 @@ export async function insertLlmCallLog(client: Client, row: LlmCallLogRow): Prom
       row.provider,
       row.model,
       row.messages,
-      row.output_text,
+      row.output_json,
       row.error,
       row.duration_ms,
     ],

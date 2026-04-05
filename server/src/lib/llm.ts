@@ -4,12 +4,19 @@ import {
   maxMessagesCharsForDb,
   maxOutputCharsForDb,
   scheduleInsertLlmCallLog,
+  serializeLlmOutputJsonForDb,
   serializeMessagesForDb,
-  truncateOutputForDb,
+  type LlmCallOutputJson,
   type LlmCallSource,
 } from '../db/llmCallLog.ts'
 import { tryExtractStructuredCodeString } from './modelStructuredParse.ts'
-import { splitThinkingFromModelCode } from './codePhaseSplit.ts'
+import {
+  mergeReasoningAndXmlCodingThought,
+  sanitizeModelThoughtMarkdown,
+  splitThinkingFromModelCode,
+  thinkingCloseLiteral,
+  THINKING_TAGS,
+} from './codePhaseSplit.ts'
 
 export type { LlmCallSource }
 
@@ -38,6 +45,9 @@ export interface LLMResponse {
 }
 
 export type ChatMessage = { role: 'system' | 'user' | 'assistant'; content: string }
+
+/** SSE deltas: reasoning_* vs `content` stay separate end-to-end (no synthetic XML merge). */
+export type ChatStreamPart = { kind: 'reasoning'; text: string } | { kind: 'content'; text: string }
 
 export type ProblemPayload = {
   title: string
@@ -89,12 +99,97 @@ function resolveApiModel(provider: 'minimax' | 'deepseek', _platformModelId: str
   return Deno.env.get('MINIMAX_MODEL') || 'MiniMax-M2.7'
 }
 
-async function* streamChat(
+/** One SSE `delta` slice before merging into `LlmCallOutputJson`. */
+type OpenAiDeltaSlice = {
+  reasoning_content?: string
+  reasoning_details?: Array<{ text: string }>
+  thinking?: string
+  content?: string
+}
+
+function deltaFromOpenAiDelta(d: Record<string, unknown>): OpenAiDeltaSlice | null {
+  const out: OpenAiDeltaSlice = {}
+  const rc = d.reasoning_content
+  if (typeof rc === 'string' && rc.length > 0) out.reasoning_content = rc
+  const rd = d.reasoning_details
+  if (Array.isArray(rd)) {
+    const details: Array<{ text: string }> = []
+    for (const item of rd) {
+      if (item && typeof item === 'object' && 'text' in item) {
+        const t = (item as { text?: unknown }).text
+        if (typeof t === 'string' && t.length > 0) details.push({ text: t })
+      }
+    }
+    if (details.length > 0) out.reasoning_details = details
+  }
+  const th = d.thinking
+  if (typeof th === 'string' && th.length > 0) out.thinking = th
+  const c = d.content
+  if (typeof c === 'string' && c.length > 0) out.content = c
+  if (Object.keys(out).length === 0) return null
+  return out
+}
+
+function mergeOpenAiSliceIntoLlmJson(acc: LlmCallOutputJson, slice: OpenAiDeltaSlice): void {
+  if (slice.reasoning_content) {
+    acc.reasoning_content = (acc.reasoning_content ?? '') + slice.reasoning_content
+  }
+  if (slice.reasoning_details?.length) {
+    const chunk = slice.reasoning_details.map((x) => x.text).join('')
+    acc.reasoning_details = (acc.reasoning_details ?? '') + chunk
+  }
+  if (slice.thinking) acc.thinking = (acc.thinking ?? '') + slice.thinking
+  if (slice.content) acc.content = (acc.content ?? '') + slice.content
+}
+
+/** Non-stream `choices[0].message`: same fields as delta, plus `content` as string or parts array. */
+function messageToOutputDelta(msg: unknown): OpenAiDeltaSlice {
+  if (!msg || typeof msg !== 'object') return {}
+  const m = msg as Record<string, unknown>
+  const out: OpenAiDeltaSlice = {}
+  if (typeof m.reasoning_content === 'string' && m.reasoning_content.length > 0) {
+    out.reasoning_content = m.reasoning_content
+  }
+  const rd = m.reasoning_details
+  if (Array.isArray(rd)) {
+    const details: Array<{ text: string }> = []
+    for (const item of rd) {
+      if (item && typeof item === 'object' && 'text' in item) {
+        const t = (item as { text?: unknown }).text
+        if (typeof t === 'string' && t.length > 0) details.push({ text: t })
+      }
+    }
+    if (details.length > 0) out.reasoning_details = details
+  }
+  if (typeof m.thinking === 'string' && m.thinking.length > 0) out.thinking = m.thinking
+  const c = m.content
+  if (typeof c === 'string' && c.length > 0) out.content = c
+  else if (Array.isArray(c)) {
+    const chunks: string[] = []
+    for (const block of c) {
+      if (block && typeof block === 'object') {
+        const t = (block as { text?: string }).text
+        if (typeof t === 'string') chunks.push(t)
+      }
+    }
+    const joined = chunks.join('')
+    if (joined) out.content = joined
+  }
+  return out
+}
+
+function messageToLlmCallOutputJson(msg: unknown): LlmCallOutputJson {
+  const o: LlmCallOutputJson = { mode: 'complete' }
+  mergeOpenAiSliceIntoLlmJson(o, messageToOutputDelta(msg))
+  return o
+}
+
+async function* streamChatParts(
   provider: 'minimax' | 'deepseek',
   platformModelId: string,
   messages: ChatMessage[],
   options: StreamLlmOptions,
-): AsyncGenerator<string, void, unknown> {
+): AsyncGenerator<ChatStreamPart, void, unknown> {
   const logLabel = options.logLabel ?? ''
   const tag = logLabel ? ` ${logLabel}` : ''
   const config = PROVIDERS[provider]
@@ -104,7 +199,7 @@ async function* streamChat(
   let shouldPersist = false
   let apiModel = ''
   let streamSucceeded = false
-  let outputAccum = ''
+  const outputMerged: LlmCallOutputJson = { mode: 'stream' }
   let persistError: string | null = null
 
   const persistRow = () => {
@@ -112,8 +207,8 @@ async function* streamChat(
     const cli = getLibsqlClient()
     const completedAt = new Date().toISOString()
     const messagesJson = serializeMessagesForDb(messages, maxMessagesCharsForDb())
-    const output_text = streamSucceeded
-      ? truncateOutputForDb(outputAccum, maxOutputCharsForDb())
+    const output_json = streamSucceeded
+      ? serializeLlmOutputJsonForDb(outputMerged, maxOutputCharsForDb())
       : null
     scheduleInsertLlmCallLog(cli, {
       id: crypto.randomUUID(),
@@ -124,7 +219,7 @@ async function* streamChat(
       provider,
       model: apiModel,
       messages: messagesJson,
-      output_text,
+      output_json,
       error: streamSucceeded ? null : persistError,
       duration_ms: Date.now() - t0,
     })
@@ -172,8 +267,6 @@ async function* streamChat(
     let carry = ''
     let deltaChunks = 0
     let deltaChars = 0
-    /** MiniMax (and similar) stream reasoning in delta.reasoning_content / reasoning_details, not in content. */
-    let pendingReasoning = ''
 
     while (true) {
       const { done, value } = await reader.read()
@@ -193,50 +286,39 @@ async function* streamChat(
           const d = json.choices?.[0]?.delta
           if (!d || typeof d !== 'object') continue
 
-          let rp = ''
-          const rc = d.reasoning_content
-          if (typeof rc === 'string' && rc.length > 0) rp += rc
-          const rd = d.reasoning_details
-          if (Array.isArray(rd)) {
-            for (const item of rd) {
-              if (item && typeof item === 'object' && 'text' in item) {
-                const t = (item as { text?: unknown }).text
-                if (typeof t === 'string' && t.length > 0) rp += t
-              }
+          const rec = d as Record<string, unknown>
+          const logged = deltaFromOpenAiDelta(rec)
+          if (logged) mergeOpenAiSliceIntoLlmJson(outputMerged, logged)
+          else {
+            const onlyContent = rec.content
+            if (typeof onlyContent === 'string' && onlyContent.length > 0) {
+              outputMerged.content = (outputMerged.content ?? '') + onlyContent
             }
           }
-          const th = d.thinking
-          if (typeof th === 'string' && th.length > 0) rp += th
 
-          if (rp) pendingReasoning += rp
+          let rp = ''
+          if (logged?.reasoning_content) rp += logged.reasoning_content
+          if (logged?.reasoning_details) {
+            for (const x of logged.reasoning_details) rp += x.text
+          }
+          if (logged?.thinking) rp += logged.thinking
 
-          const content = d.content
-          if (typeof content === 'string' && content.length > 0) {
-            if (pendingReasoning.trim()) {
-              const wrapped = `<redacted_thinking>${pendingReasoning.trim()}</redacted_thinking>\n`
-              deltaChunks++
-              deltaChars += wrapped.length
-              outputAccum += wrapped
-              yield wrapped
-              pendingReasoning = ''
-            }
+          if (rp) {
+            deltaChunks++
+            deltaChars += rp.length
+            yield { kind: 'reasoning', text: rp }
+          }
+
+          const content = typeof rec.content === 'string' ? rec.content : ''
+          if (content.length > 0) {
             deltaChunks++
             deltaChars += content.length
-            outputAccum += content
-            yield content
+            yield { kind: 'content', text: content }
           }
         } catch {
           // ignore partial JSON lines
         }
       }
-    }
-
-    if (pendingReasoning.trim()) {
-      const wrapped = `<redacted_thinking>${pendingReasoning.trim()}</redacted_thinking>`
-      deltaChunks++
-      deltaChars += wrapped.length
-      outputAccum += wrapped
-      yield wrapped
     }
 
     streamSucceeded = true
@@ -281,7 +363,8 @@ ${functionSignature}
 - 可执行部分必须直接以源码出现：行首应是 \`function\`（或允许的顶层声明），不要在 \`function\` 前多加引号或把 \`function ${entryPoint}\` 放进字符串里。
 - 使用普通顶层函数；不要 export 模块，也不要把要求的函数包在对象里。
 - 只输出恰好一个完整的顶层 \`function ${entryPoint}\`（或与签名匹配的唯一声明）。不要为同一入口函数输出两份完整实现。
-- 若 API 提供单独的推理通道，请在那里做规划；主消息流保持为可运行程序。`
+- 若 API 提供单独的推理通道，请在那里做规划；主消息流保持为可运行程序。
+- 禁止在回复中出现 \`<redacted_thinking>\`、\`</think>\` 或 \`<thinking>\` 等标签字面量（会导致评测解析失败）。`
 }
 
 export async function* streamProblemAnalysis(
@@ -303,10 +386,12 @@ ${problem.functionSignature}
   const logLabel = options.logLabel
     ? `${options.logLabel} analysis`
     : 'analysis'
-  yield* streamChat(provider, platformModelId, [
+  for await (const part of streamChatParts(provider, platformModelId, [
     { role: 'system', content: ANALYSIS_SYSTEM },
     { role: 'user', content: user },
-  ], { ...options, logLabel })
+  ], { ...options, logLabel })) {
+    yield part.text
+  }
 }
 
 export async function* streamProblemCode(
@@ -315,7 +400,7 @@ export async function* streamProblemCode(
   problem: ProblemPayload,
   analysis: string,
   options: StreamLlmOptions,
-): AsyncGenerator<string, void, unknown> {
+): AsyncGenerator<ChatStreamPart, void, unknown> {
   const problemUser = `题目：${problem.title}
 
 题目描述：
@@ -329,10 +414,10 @@ ${problem.functionSignature}`
   const codeUser =
     `请写出 JavaScript 实现：仅一个符合签名的 ${problem.entryPoint}，不要重复实现。` +
     `基于你上文的分析完成实现；不要在输出中重复大段说明文字。` +
-    `直接输出可执行源码，不要在整段外加双引号或单引号，不要用字符串包裹 function。`
+    `直接输出可执行源码，不要在整段外加双引号或单引号，不要用字符串包裹 function，不要在 function 后加分析。`
 
   const logLabel = options.logLabel ? `${options.logLabel} code` : 'code'
-  yield* streamChat(provider, platformModelId, [
+  yield* streamChatParts(provider, platformModelId, [
     { role: 'system', content: buildCodeSystem(problem.entryPoint, problem.functionSignature) },
     { role: 'user', content: problemUser },
     { role: 'assistant', content: assistantAnalysis },
@@ -340,52 +425,60 @@ ${problem.functionSignature}`
   ], { ...options, logLabel })
 }
 
-/**
- * Interleaved reasoning blocks (OpenAI-compatible stream often concatenates these into assistant text).
- * Stripped only when preparing runnable JS; battle snapshots keep the raw model output for UI.
- */
-const INTERTHINKING_BLOCK_RES: RegExp[] = [
-  /<redacted_thinking>[\s\S]*?<\/redacted_thinking>/gi,
-  /<thinking>[\s\S]*?<\/thinking>/gi,
-]
-
-export function stripInterleavedThinking(text: string): string {
-  let s = text
-  for (const re of INTERTHINKING_BLOCK_RES) {
-    s = s.replace(re, '\n')
-  }
-  // Unclosed streaming tail (no </…> yet) — never send to QuickJS
-  s = s.replace(/<redacted_thinking>[\s\S]*$/gi, '\n')
-  s = s.replace(/<thinking>[\s\S]*$/gi, '\n')
-  return s.trim()
+function escapeRegExpForThinking(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
-/**
- * Strip optional ```js fences if the model still emits them.
- * Preserves prefix/suffix outside the first fence (e.g. MiniMax `<redacted_thinking>` then fenced code);
- * the previous implementation returned only the fenced body and dropped thinking.
- */
+/** 仅用于命题 JSON 等解析前清洗；不在流式 / finalizeRunnable 里跑（避免每 chunk 多轮正则）。 */
+function stripThinkingXmlForAuthoringParse(s: string): string {
+  let t = s
+  for (const spec of THINKING_TAGS) {
+    const { openName } = spec
+    const closeLiteral = thinkingCloseLiteral(spec)
+    const closeEsc = escapeRegExpForThinking(closeLiteral)
+    const pair = new RegExp(`<${openName}\\b[^>]*>[\\s\\S]*?${closeEsc}`, 'gi')
+    t = t.replace(pair, '\n')
+  }
+  for (const { openName } of THINKING_TAGS) {
+    t = t.replace(new RegExp(`<${openName}\\b[^>]*>[\\s\\S]*$`, 'gi'), '\n')
+  }
+  for (const spec of THINKING_TAGS) {
+    const { openName } = spec
+    const closeLiteral = thinkingCloseLiteral(spec)
+    t = t.replace(new RegExp(escapeRegExpForThinking(closeLiteral), 'gi'), '\n')
+    t = t.replace(new RegExp(`<${openName}\\b[^>]*>`, 'gi'), '\n')
+  }
+  return t.replace(/\n{3,}/g, '\n\n').trim()
+}
+
+export function stripInterleavedThinking(text: string): string {
+  return stripThinkingXmlForAuthoringParse(text)
+}
+
+/** First ```js / ```javascript fenced block body only, if present; else unchanged. */
 export function stripCodeFences(text: string): string {
-  const trimmed = text.trim()
-  const fenceRe = /```(?:javascript|js)?\s*([\s\S]*?)```/
-  const m = trimmed.match(fenceRe)
-  if (!m || m.index === undefined) return trimmed
-  const prefix = trimmed.slice(0, m.index).trim()
-  const inner = m[1].trim()
-  const after = trimmed.slice(m.index + m[0].length).trim()
-  let body = prefix ? `${prefix}\n\n${inner}` : inner
-  if (after) body = `${body}\n\n${after}`
-  return body.trim()
+  const t = text.trim()
+  const m = t.match(/```(?:javascript|js)?\s*([\s\S]*?)```/)
+  return m ? m[1].trim() : t
+}
+
+/** 仅当整段像 JSON 结构化代码阶段时才尝试抽 `代码` 字段，避免把含 `{` 的普通 JS 截断。 */
+function shouldTryStructuredCodeExtract(s: string): boolean {
+  const t = s.trimStart()
+  return t.startsWith('{') || t.startsWith('[') || /^```(?:json)?\b/i.test(t)
+}
+
+/** Runnable JS：`splitThinkingFromModelCode` 后不再做 XML 剥离（省流式每 tick 成本）。 */
+export function finalizeRunnableFromCodeOnly(code: string): string {
+  const t = code.trim()
+  const base = shouldTryStructuredCodeExtract(t) ? (tryExtractStructuredCodeString(t) ?? t) : t
+  return stripCodeFences(base).trim()
 }
 
 /** Runnable JS for harness; aligns with web prepareRunnableJavaScript. */
 export function prepareRunnableJavaScript(text: string): string {
-  const structured = tryExtractStructuredCodeString(text)
-  if (structured) {
-    return stripCodeFences(stripInterleavedThinking(structured))
-  }
-  const { code } = splitThinkingFromModelCode(text)
-  return stripCodeFences(stripInterleavedThinking(code))
+  const { code } = splitThinkingFromModelCode(text.trim())
+  return finalizeRunnableFromCodeOnly(code)
 }
 
 export async function callLLM(provider: 'minimax' | 'deepseek', request: LLMRequest): Promise<LLMResponse> {
@@ -398,13 +491,16 @@ export async function callLLM(provider: 'minimax' | 'deepseek', request: LLMRequ
     thought += d
   }
 
-  let code = ''
-  for await (const d of streamProblemCode(provider, request.model, request.problem, thought, { source: 'other' })) {
-    code += d
+  let reasoning = ''
+  let content = ''
+  for await (const part of streamProblemCode(provider, request.model, request.problem, thought, { source: 'other' })) {
+    if (part.kind === 'reasoning') reasoning += part.text
+    else content += part.text
   }
 
-  const codingThought = splitThinkingFromModelCode(code).thinking
-  const runnable = prepareRunnableJavaScript(code) || '// 未生成代码'
+  const { thinking: xmlThink, code: codeOnly } = splitThinkingFromModelCode(content)
+  const codingThought = mergeReasoningAndXmlCodingThought(reasoning, xmlThink)
+  const runnable = finalizeRunnableFromCodeOnly(codeOnly) || '// 未生成代码'
 
   return {
     thought: thought.trim() || '无分析内容',
@@ -469,7 +565,7 @@ async function chatCompletionContent(
 
   const createdAt = new Date().toISOString()
   const t0 = Date.now()
-  let outputAccum = ''
+  let completionOutputJson: LlmCallOutputJson = { mode: 'complete' }
   let persistError: string | null = null
   let streamSucceeded = false
 
@@ -486,8 +582,8 @@ async function chatCompletionContent(
       provider,
       model: apiModel,
       messages: serializeMessagesForDb(messages, maxMessagesCharsForDb()),
-      output_text: streamSucceeded
-        ? truncateOutputForDb(outputAccum, maxOutputCharsForDb())
+      output_json: streamSucceeded
+        ? serializeLlmOutputJsonForDb(completionOutputJson, maxOutputCharsForDb())
         : null,
       error: streamSucceeded ? null : persistError,
       duration_ms: Date.now() - t0,
@@ -516,6 +612,8 @@ async function chatCompletionContent(
     }
 
     const json: unknown = await response.json()
+    const root = json as { choices?: Array<{ message?: unknown }> }
+    completionOutputJson = messageToLlmCallOutputJson(root.choices?.[0]?.message)
     const content = extractCompletionMessageContent(json)
     if (!content) {
       const preview = JSON.stringify(json).slice(0, 1200)
@@ -524,7 +622,6 @@ async function chatCompletionContent(
       throw new Error(persistError)
     }
 
-    outputAccum = content
     streamSucceeded = true
     return content.trim()
   } catch (e) {

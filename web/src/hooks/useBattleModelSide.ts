@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { prepareRunnableJavaScript } from '@/lib/stripCodeFences'
 import { api } from '@/api/client'
 import type { ModelResult, ProblemGradingContext, TestCase, TestResult } from '@/types'
 import { useSandbox } from '@/utils/sandbox'
@@ -91,7 +90,7 @@ export function useBattleModelSide({
     if (ranRef.current) return
     ranRef.current = true
 
-    const code = prepareRunnableJavaScript(result.code ?? '')
+    const code = (result.code ?? '').trim()
     if (!code || testCases.length === 0) {
       const emptyOfficial = {
         passed: 0,

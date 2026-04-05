@@ -1,164 +1,120 @@
 import { tryExtractStructuredCodeString } from '@/lib/modelStructuredParse'
 
 /**
- * Match server `stripInterleavedThinking` + `stripCodeFences` before QuickJS run.
- * Battle UI keeps raw `result.code` (thinking + code); execution uses `prepareRunnableJavaScript`.
+ * 与 server `codePhaseSplit.ts` 同步：`ThinkingTagSpec` + `THINKING_TAGS` + `thinkingCloseLiteral`。
  */
-const INTERTHINKING_BLOCK_RES: RegExp[] = [
-  /<redacted_thinking>[\s\S]*?<\/redacted_thinking>/gi,
-  /<thinking>[\s\S]*?<\/thinking>/gi,
-]
+export type ThinkingTagSpec = { readonly openName: string; readonly closeTag?: string }
 
-const XML_THINKING_INNER: string[] = [
-  '<redacted_thinking>([\\s\\S]*?)</redacted_thinking>',
-  '<thinking>([\\s\\S]*?)</thinking>',
-]
+export function thinkingCloseLiteral(spec: ThinkingTagSpec): string {
+  return `</${spec.closeTag ?? spec.openName}>`
+}
 
-function peelOpenTagWithoutClose(
-  s: string,
-  open: string,
-  close: string,
-  parts: string[],
-): string {
-  const lc = s.toLowerCase()
-  const oi = lc.lastIndexOf(open.toLowerCase())
-  if (oi < 0) return s
-  const afterOpen = oi + open.length
-  if (s.toLowerCase().indexOf(close.toLowerCase(), afterOpen) >= 0) return s
+export const THINKING_TAGS: readonly ThinkingTagSpec[] = [
+  { openName: 'redacted_thinking' },
+  { openName: 'thinking' },
+  { openName: 'think' },
+  { openName: 'reasoning' },
+  { openName: 'thought' },
+] as const
 
-  let inner = s.slice(afterOpen)
-  const codeStart = inner.search(/(?:^|\n)\s*function\s+main\b/)
-  if (codeStart >= 0) {
-    const think = inner.slice(0, codeStart).trim()
-    const codeRest = inner.slice(codeStart).trimStart()
-    if (think) parts.push(think)
-    return s.slice(0, oi) + codeRest
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+function findEarliestThinkingOpen(s: string): {
+  start: number
+  openLen: number
+  closeLiteral: string
+} | null {
+  let best: { start: number; openLen: number; closeLiteral: string } | null = null
+  for (const spec of THINKING_TAGS) {
+    const { openName } = spec
+    const re = new RegExp(`<${openName}\\b[^>]*>`, 'i')
+    const m = re.exec(s)
+    if (!m || m.index === undefined) continue
+    const closeLiteral = thinkingCloseLiteral(spec)
+    if (!best || m.index < best.start) {
+      best = { start: m.index, openLen: m[0].length, closeLiteral }
+    }
   }
-  const fenceStart = inner.search(/(?:^|\n)\s*```(?:javascript|js)?\b/)
-  if (fenceStart >= 0) {
-    const think = inner.slice(0, fenceStart).trim()
-    const codeRest = inner.slice(fenceStart)
-    if (think) parts.push(think)
-    return s.slice(0, oi) + codeRest
-  }
-  const t = inner.trim()
-  if (t) parts.push(t)
-  return s.slice(0, oi)
+  return best
 }
 
-function peelAllUnclosedThinking(s: string, parts: string[]): string {
-  let out = s
-  out = peelOpenTagWithoutClose(out, '<redacted_thinking>', '</redacted_thinking>', parts)
-  out = peelOpenTagWithoutClose(out, '<thinking>', '</thinking>', parts)
-  return out
-}
-
-/** MiniMax / models sometimes leak closing tags or bare markers into `content`. */
-function removeLeakedThinkingMarkers(s: string): string {
-  return s
-    .replace(/<\/redacted_thinking>/gi, '\n')
-    .replace(/<redacted_thinking>/gi, '\n')
-    .replace(/<\/thinking>/gi, '\n')
-    .replace(/<thinking>/gi, '\n')
-}
-
-/** Strip XML-style thinking wrappers so markdown/highlighters do not treat them as HTML. */
 export function sanitizeCodingThoughtForDisplay(s: string): string {
+  return s.replace(/\n{3,}/g, '\n\n').trim()
+}
+
+function stripThinkingXmlForInterleaved(s: string): string {
   let t = s
-  t = t.replace(/<redacted_thinking>([\s\S]*?)<\/redacted_thinking>/gi, '$1')
-  t = t.replace(/<thinking>([\s\S]*?)<\/thinking>/gi, '$1')
-  t = removeLeakedThinkingMarkers(t)
+  for (const spec of THINKING_TAGS) {
+    const { openName } = spec
+    const closeLiteral = thinkingCloseLiteral(spec)
+    const closeEsc = escapeRegExp(closeLiteral)
+    const pair = new RegExp(`<${openName}\\b[^>]*>[\\s\\S]*?${closeEsc}`, 'gi')
+    t = t.replace(pair, '\n')
+  }
+  for (const { openName } of THINKING_TAGS) {
+    t = t.replace(new RegExp(`<${openName}\\b[^>]*>[\\s\\S]*$`, 'gi'), '\n')
+  }
+  for (const spec of THINKING_TAGS) {
+    const { openName } = spec
+    const closeLiteral = thinkingCloseLiteral(spec)
+    t = t.replace(new RegExp(escapeRegExp(closeLiteral), 'gi'), '\n')
+    t = t.replace(new RegExp(`<${openName}\\b[^>]*>`, 'gi'), '\n')
+  }
   return t.replace(/\n{3,}/g, '\n\n').trim()
 }
 
-/**
- * Multiple top-level `function main` blocks: keep the last as final code; earlier + sandwiched prose → thinking.
- * Matches MiniMax streaming code first, then meta-prose, stray `</redacted_thinking>`, then final code.
- */
-function extractLastMainBlock(s: string): { prefix: string; code: string } {
-  const re = /^function\s+main\b/gm
-  const idx: number[] = []
-  let m: RegExpExecArray | null
-  const r = new RegExp(re.source, 'gm')
-  while ((m = r.exec(s)) !== null) idx.push(m.index)
-  if (idx.length < 2) return { prefix: '', code: s }
-  const start = idx[idx.length - 1]!
-  return { prefix: s.slice(0, start).trim(), code: s.slice(start).trim() }
-}
-
-/**
- * After XML blocks: treat non-empty text before first ```js``` as thinking (MiniMax often streams prose then a fence).
- */
-function splitLeadingProseBeforeFence(s: string): { prose: string; rest: string } {
-  const trimmed = s.replace(/\n{3,}/g, '\n\n').trim()
-  const idx = trimmed.search(/```(?:javascript|js)?/)
-  if (idx <= 0) return { prose: '', rest: trimmed }
-  const prose = trimmed.slice(0, idx).trim()
-  const fromFence = trimmed.slice(idx)
-  const closed = fromFence.match(/^```(?:javascript|js)?\s*([\s\S]*?)```/)
-  if (closed) {
-    const inner = closed[1].trim()
-    const tail = fromFence.slice(closed[0].length).trim()
-    const code = tail ? `${inner}\n\n${tail}` : inner
-    return { prose, rest: code }
-  }
-  const open = fromFence.match(/^```(?:javascript|js)?\s*\n?([\s\S]*)$/)
-  if (open) return { prose, rest: open[1].trim() }
-  return { prose: '', rest: trimmed }
-}
-
-/** Pull thinking out for collapsible UI; code is suitable for highlight + stripCodeFences + runner. */
 export function splitThinkingFromModelCode(raw: string): { thinking: string; code: string } {
   const parts: string[] = []
-  let s = peelAllUnclosedThinking(raw, parts)
-  for (const body of XML_THINKING_INNER) {
-    const re = new RegExp(body, 'gi')
-    s = s.replace(re, (_m, inner: string) => {
-      const t = inner.trim()
-      if (t) parts.push(t)
-      return '\n'
-    })
+  let s = raw
+  while (true) {
+    const op = findEarliestThinkingOpen(s)
+    if (!op) break
+    const afterOpen = op.start + op.openLen
+    const closeIdx = s.toLowerCase().indexOf(op.closeLiteral.toLowerCase(), afterOpen)
+    if (closeIdx < 0) {
+      const inner = s.slice(afterOpen).trim()
+      if (inner) parts.push(inner)
+      s = s.slice(0, op.start)
+      break
+    }
+    const inner = s.slice(afterOpen, closeIdx).trim()
+    if (inner) parts.push(inner)
+    s = s.slice(0, op.start) + '\n' + s.slice(closeIdx + op.closeLiteral.length)
   }
-  s = removeLeakedThinkingMarkers(s).replace(/\n{3,}/g, '\n\n').trim()
-  const { prose, rest } = splitLeadingProseBeforeFence(s)
-  if (prose) parts.push(prose)
-  const { prefix, code: lastMain } = extractLastMainBlock(rest.trim())
-  if (prefix) parts.push(prefix)
   return {
-    thinking: sanitizeCodingThoughtForDisplay(parts.join('\n\n───\n\n')),
-    code: lastMain.trim(),
+    thinking: parts.join('\n\n───\n\n').trim(),
+    code: s.replace(/\n{3,}/g, '\n\n').trim(),
   }
+}
+
+export function mergeReasoningAndXmlCodingThought(reasoning: string, xmlThinking: string): string {
+  return [reasoning.trim(), xmlThinking.trim()].filter(Boolean).join('\n\n───\n\n').replace(/\n{3,}/g, '\n\n').trim()
 }
 
 export function stripInterleavedThinking(text: string): string {
-  let s = text
-  for (const re of INTERTHINKING_BLOCK_RES) {
-    s = s.replace(re, '\n')
-  }
-  s = s.replace(/<redacted_thinking>[\s\S]*$/gi, '\n')
-  s = s.replace(/<thinking>[\s\S]*$/gi, '\n')
-  return s.trim()
+  return stripThinkingXmlForInterleaved(text)
 }
 
-/** Keeps text before/after first ``` fence (e.g. interleaved thinking + fenced JS). */
 export function stripCodeFences(text: string): string {
-  const trimmed = text.trim()
-  const fenceRe = /```(?:javascript|js)?\s*([\s\S]*?)```/
-  const m = trimmed.match(fenceRe)
-  if (!m || m.index === undefined) return trimmed
-  const prefix = trimmed.slice(0, m.index).trim()
-  const inner = m[1].trim()
-  const after = trimmed.slice(m.index + m[0].length).trim()
-  let body = prefix ? `${prefix}\n\n${inner}` : inner
-  if (after) body = `${body}\n\n${after}`
-  return body.trim()
+  const t = text.trim()
+  const m = t.match(/```(?:javascript|js)?\s*([\s\S]*?)```/)
+  return m ? m[1].trim() : t
+}
+
+function shouldTryStructuredCodeExtract(s: string): boolean {
+  const t = s.trimStart()
+  return t.startsWith('{') || t.startsWith('[') || /^```(?:json)?\b/i.test(t)
+}
+
+export function finalizeRunnableFromCodeOnly(code: string): string {
+  const t = code.trim()
+  const base = shouldTryStructuredCodeExtract(t) ? (tryExtractStructuredCodeString(t) ?? t) : t
+  return stripCodeFences(base).trim()
 }
 
 export function prepareRunnableJavaScript(text: string): string {
-  const structured = tryExtractStructuredCodeString(text)
-  if (structured) {
-    return stripCodeFences(stripInterleavedThinking(structured))
-  }
-  const { code } = splitThinkingFromModelCode(text)
-  return stripCodeFences(stripInterleavedThinking(code))
+  const { code } = splitThinkingFromModelCode(text.trim())
+  return finalizeRunnableFromCodeOnly(code)
 }

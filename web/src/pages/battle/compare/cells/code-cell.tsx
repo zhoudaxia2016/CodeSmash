@@ -18,14 +18,16 @@ import {
 export function CodeCell({ battleId, hook }: { battleId: string; hook: ModelSideHook }) {
   const { displayResult, showCode } = hook
   const raw = displayResult.code ?? ''
-  const ct = displayResult.codingThought
-  const useServerSplit =
-    ct !== undefined && ct.trim().length > 0 && !rawCodeStillHasThinkingXml(raw)
-  const split = useServerSplit
-    ? { thinking: ct ?? '', code: raw }
+  const ct = (displayResult.codingThought ?? '').trim()
+  /** Battle API splits thinking vs code on the server; client split only for legacy rows with merged XML. */
+  const useServerFields = ct.length > 0 || !rawCodeStillHasThinkingXml(raw)
+  const split = useServerFields
+    ? { thinking: displayResult.codingThought ?? '', code: raw }
     : splitThinkingFromModelCode(raw)
   const thinking = sanitizeCodingThoughtForDisplay(split.thinking)
   const codeForHighlight = stripCodeFences(split.code)
+  const hasThinkingUi = thinking.trim().length > 0
+  const hasCodeUi = codeForHighlight.trim().length > 0
 
   const codeStreaming = displayResult.phase === 'coding'
   const [thinkingOpen, setThinkingOpen] = useState(() => codeStreaming)
@@ -46,10 +48,10 @@ export function CodeCell({ battleId, hook }: { battleId: string; hook: ModelSide
           onScroll={codePhaseScroll.onScroll}
           className={PHASE_CARD_INNER_SCROLL}
         >
-          {displayResult.phase === 'coding' && !raw && (
+          {displayResult.phase === 'coding' && !hasThinkingUi && !hasCodeUi && (
             <p className="text-sm text-muted-foreground px-3 py-3">正在生成代码…</p>
           )}
-          {showCode && raw && (
+          {showCode && (hasThinkingUi || hasCodeUi) && (
             <div className="space-y-4 p-3">
               {thinking ? (
                 <details
