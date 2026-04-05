@@ -14,7 +14,7 @@ async function migrateDropProblemDifficulty(client: Client): Promise<void> {
     console.log('[db] migration: dropped problems.difficulty')
   } catch (e) {
     console.warn(
-      '[db] migration: could not drop problems.difficulty (delete server/data/codesmesh.db if stuck)',
+      '[db] migration: could not drop problems.difficulty (delete server/data/codesmash.db if stuck)',
       e,
     )
   }
@@ -32,7 +32,7 @@ async function migrateDropTestCaseEnabled(client: Client): Promise<void> {
     console.log('[db] migration: dropped problem_test_cases.enabled')
   } catch (e) {
     console.warn(
-      '[db] migration: could not drop problem_test_cases.enabled (delete server/data/codesmesh.db if stuck)',
+      '[db] migration: could not drop problem_test_cases.enabled (delete server/data/codesmash.db if stuck)',
       e,
     )
   }
@@ -118,7 +118,7 @@ async function migrateStripTestCaseSourceAndSort(client: Client): Promise<void> 
     })
   } catch (e) {
     console.warn(
-      '[db] migration: strip test case source/sort_order failed (delete server/data/codesmesh.db if stuck)',
+      '[db] migration: strip test case source/sort_order failed (delete server/data/codesmash.db if stuck)',
       e,
     )
   }

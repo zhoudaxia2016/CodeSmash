@@ -54,7 +54,7 @@ function App() {
             <span className="text-white font-bold text-sm tracking-tight">CS</span>
           </div>
           <div className="flex flex-col gap-0.5 min-w-0">
-            <span className="font-semibold text-foreground tracking-tight truncate">CodeSmesh</span>
+            <span className="font-semibold text-foreground tracking-tight truncate">CodeSmash</span>
             <span className="text-[11px] text-muted-foreground font-medium uppercase tracking-wider">
               Arena
             </span>

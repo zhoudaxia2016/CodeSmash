@@ -15,7 +15,7 @@ const app = new Hono()
 
 app.use('*', rateLimit)
 
-app.get('/', (c) => c.json({ status: 'ok', service: 'codesmesh-api' }))
+app.get('/', (c) => c.json({ status: 'ok', service: 'codesmash-api' }))
 
 const api = new Hono()
 

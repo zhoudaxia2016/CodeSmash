@@ -1,6 +1,6 @@
 import type { BattleSession } from '@/types'
 
-const STORAGE_KEY = 'codesmesh:battle-history'
+const STORAGE_KEY = 'codesmash:battle-history'
 
 export type LocalBattleHistoryEntry = {
   id: string
