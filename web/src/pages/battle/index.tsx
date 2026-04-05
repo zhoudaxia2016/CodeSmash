@@ -2,15 +2,8 @@ import { useState, useEffect, useLayoutEffect, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { ChevronDown } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
-import {
-  useProblem,
-  useStartBattle,
-  useBattle,
-  useUpdateProblem,
-  useCreateTestCase,
-  useUpdateTestCase,
-  useDeleteTestCase,
-} from '@/hooks/useApi'
+import { useProblem, useStartBattle, useBattle } from '@/hooks/useApi'
+import { usePersistProblemEditorUpdate } from '@/hooks/usePersistProblemEditorUpdate'
 import type { PlatformModel, Problem, ProblemGradingContext } from '@/types'
 import { defaultAuthoringModelId } from '@/lib/authoring-model'
 import { ProblemEditor, type ProblemEditorProps } from '@/components/problem-editor'
@@ -43,10 +36,7 @@ export function Battle({ models, problems }: { models: PlatformModel[]; problems
   const problemDetailQuery = useProblem(selectedProblem, {
     enabled: !!selectedProblem && problemDetailOpen,
   })
-  const updateProblem = useUpdateProblem()
-  const createTc = useCreateTestCase()
-  const updateTc = useUpdateTestCase()
-  const deleteTc = useDeleteTestCase()
+  const persistProblemEditorUpdate = usePersistProblemEditorUpdate()
 
   const runTestCases = useMemo(() => {
     if (!selectedProblem || !problemForBattleQuery.isSuccess) return []
@@ -67,6 +57,14 @@ export function Battle({ models, problems }: { models: PlatformModel[]; problems
   }, [problemForBattleQuery.data?.problem, problems, selectedProblem])
 
   const selectedProblemRow = problems.find((p) => p.id === selectedProblem)
+
+  const problemTagCatalog = useMemo(() => {
+    const s = new Set<string>()
+    for (const p of problems) {
+      for (const t of p.tags ?? []) s.add(t)
+    }
+    return Array.from(s).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }))
+  }, [problems])
 
   const [headerSlotEl, setHeaderSlotEl] = useState<HTMLElement | null>(null)
 
@@ -90,37 +88,6 @@ export function Battle({ models, problems }: { models: PlatformModel[]; problems
       if (!modelB) setModelB(models[1]?.id || models[0].id)
     }
   }, [models, modelA, modelB])
-
-  const handleProblemDetailConfirm = async (
-    args: Parameters<NonNullable<ProblemEditorProps['onConfirm']>>[0],
-  ) => {
-    if (args.kind !== 'update') return
-    const pid = args.problemId
-    await updateProblem.mutateAsync({ id: pid, data: args.problem })
-    for (const id of args.testCaseDeletes) {
-      await deleteTc.mutateAsync({ problemId: pid, testCaseId: id })
-    }
-    for (const u of args.testCaseUpdates) {
-      await updateTc.mutateAsync({
-        problemId: pid,
-        testCaseId: u.testCaseId,
-        data: { data: u.data, ans: u.ans },
-      })
-    }
-    for (const c of args.testCaseCreates) {
-      await createTc.mutateAsync({
-        problemId: pid,
-        data: {
-          data: c.data,
-          ans: c.ans,
-          input: JSON.stringify(c.data),
-          expectedOutput: c.ans !== undefined ? JSON.stringify(c.ans) : '',
-        },
-      })
-    }
-    await queryClient.invalidateQueries({ queryKey: ['problems', pid] })
-    await queryClient.invalidateQueries({ queryKey: ['problems'] })
-  }
 
   const canStart = selectedProblem && modelA && modelB
   const modelAName = models.find((m) => m.id === modelA)?.name || 'Model A'
@@ -256,6 +223,7 @@ export function Battle({ models, problems }: { models: PlatformModel[]; problems
         onOpenChange={setNewProblemOpen}
         models={models}
         defaultModelId={defaultAuthoringModelId(models)}
+        tagSuggestions={problemTagCatalog}
         onCreated={(id) => {
           setSelectedProblem(id)
           setNewProblemOpen(false)
@@ -278,7 +246,15 @@ export function Battle({ models, problems }: { models: PlatformModel[]; problems
           problemSummary={selectedProblemRow}
           models={models}
           defaultModelId={defaultAuthoringModelId(models)}
-          onConfirm={handleProblemDetailConfirm}
+          tagSuggestions={problemTagCatalog}
+          onConfirm={async (
+            args: Parameters<NonNullable<ProblemEditorProps['onConfirm']>>[0],
+          ) => {
+            await persistProblemEditorUpdate(args)
+            if (args.kind === 'update') {
+              setProblemDetailOpen(false)
+            }
+          }}
           submitLabel="保存全部"
         />
       )}

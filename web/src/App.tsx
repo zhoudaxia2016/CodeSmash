@@ -89,11 +89,16 @@ function App() {
                   className="flex min-w-0 flex-1 flex-wrap items-center gap-2 lg:justify-end"
                 />
               </div>
+            ) : view === 'problems' ? (
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between lg:gap-6">
+                <h1 className="shrink-0 text-xl font-semibold tracking-tight text-foreground">题目库</h1>
+                <div
+                  id="problems-header-slot"
+                  className="flex min-w-0 flex-1 flex-wrap items-center gap-2 lg:justify-end"
+                />
+              </div>
             ) : (
-              <h1 className="text-xl font-semibold tracking-tight text-foreground">
-                {view === 'problems' && 'Problems'}
-                {view === 'leaderboard' && 'Leaderboard'}
-              </h1>
+              <h1 className="text-xl font-semibold tracking-tight text-foreground">Leaderboard</h1>
             )}
           </div>
         </header>

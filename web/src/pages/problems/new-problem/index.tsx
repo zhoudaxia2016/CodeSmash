@@ -12,7 +12,7 @@ type Props = {
   onCreated: (problemId: string) => void
 }
 
-/** Battle 专用：仅挂载 `ProblemEditor` 新建流，与 Problems 页解耦以便后续各自演进。 */
+/** Problems 专用：仅挂载 `ProblemEditor` 新建流，与 Battle 解耦以便后续各自演进。 */
 export function NewProblem(props: Props) {
   const create = useCreateProblem()
 
@@ -21,7 +21,7 @@ export function NewProblem(props: Props) {
       open={props.open}
       onOpenChange={props.onOpenChange}
       title="新建题目"
-      titleId="battle-new-problem-title"
+      titleId="problems-new-problem-title"
       mode="create"
       models={props.models}
       defaultModelId={props.defaultModelId}

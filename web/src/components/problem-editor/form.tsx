@@ -59,6 +59,8 @@ type Props = {
   loading?: boolean
   loadFailed?: boolean
   problemSummary?: Problem
+  /** 全库出现过的标签，用于标签输入快捷选择 */
+  tagSuggestions?: string[]
   onConfirm: (args: ProblemEditorConfirmArgs) => Promise<void>
   onCancel?: () => void
   cancelLabel?: string
@@ -113,6 +115,7 @@ export function ProblemEditorForm({
   loading = false,
   loadFailed = false,
   problemSummary,
+  tagSuggestions,
   onConfirm,
   onCancel,
   cancelLabel = '取消',
@@ -490,6 +493,7 @@ export function ProblemEditorForm({
               onDescriptionChange={setDescription}
               tags={tags}
               onTagsChange={setTags}
+              tagSuggestions={tagSuggestions}
               functionSignature={functionSignature}
               onFunctionSignatureChange={setFunctionSignature}
               entryPoint={entryPoint}
