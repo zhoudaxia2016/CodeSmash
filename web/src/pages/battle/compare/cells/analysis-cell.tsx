@@ -1,3 +1,4 @@
+import { useRef } from 'react'
 import { useStickToBottomScroll } from '@/hooks/useStickToBottomScroll'
 import { MarkdownViewer } from '@/components/markdown-viewer'
 import { sanitizeCodingThoughtForDisplay } from '@/lib/stripCodeFences'
@@ -8,10 +9,12 @@ export function AnalysisCell({ battleId, hook }: { battleId: string; hook: Model
   const { displayResult, failedLlm, showAnalysis } = hook
   const thought = sanitizeCodingThoughtForDisplay(displayResult.thought ?? '')
   const analysisStreaming = displayResult.phase === 'analyzing'
+  const analysisContentRef = useRef<HTMLDivElement>(null)
   const analysisScroll = useStickToBottomScroll({
     resetKey: battleId,
     force: analysisStreaming,
     syncKey: `${analysisStreaming ? 1 : 0}:${showAnalysis ? 1 : 0}:${thought.length}:${thought}`,
+    observeSizeRef: analysisContentRef,
   })
 
   return (
@@ -30,7 +33,9 @@ export function AnalysisCell({ battleId, hook }: { battleId: string; hook: Model
           )}
           {showAnalysis && String(thought).trim() && (
             <div className="border-l-[3px] border-l-primary/45 px-3 py-3 sm:pl-4">
-              <MarkdownViewer content={thought} className="thinking-md" />
+              <div ref={analysisContentRef} className="min-w-0">
+                <MarkdownViewer content={thought} className="thinking-md" />
+              </div>
             </div>
           )}
         </div>
