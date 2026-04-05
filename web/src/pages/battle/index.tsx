@@ -4,6 +4,7 @@ import { ChevronDown, X } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useProblem, useStartBattle, useBattle } from '@/hooks/useApi'
 import type { PlatformModel, Problem, ProblemGradingContext, TestCase } from '@/types'
+import { defaultAuthoringModelId } from '@/lib/authoring-model'
 import { Result } from './result'
 import { NewProblem } from './new-problem'
 import { CodeBlock } from '@/components/code-block'
@@ -246,7 +247,7 @@ export function Battle({ models, problems }: { models: PlatformModel[]; problems
         open={newProblemOpen}
         onOpenChange={setNewProblemOpen}
         models={models}
-        defaultModelId={modelA || models[0]?.id || ''}
+        defaultModelId={defaultAuthoringModelId(models)}
         onCreated={(id) => {
           setSelectedProblem(id)
           void queryClient.invalidateQueries({ queryKey: ['problems'] })

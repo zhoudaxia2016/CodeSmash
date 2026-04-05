@@ -1,7 +1,7 @@
 import { X } from 'lucide-react'
 import type { PlatformModel } from '@/types'
 import { Button } from '@/components/ui/button'
-import { CreateProblemForm } from '@/components/create-problem-form'
+import { CreateProblem } from '@/components/create-problem'
 
 type Props = {
   open: boolean
@@ -56,7 +56,7 @@ export function NewProblem({
           </Button>
         </div>
         <div className="flex min-h-0 flex-1 flex-col">
-          <CreateProblemForm
+          <CreateProblem
             models={models}
             defaultModelId={defaultModelId}
             onCreated={(id) => {
