@@ -75,10 +75,8 @@ function isEcmaLineTerminatorAt(source: string, j: number): boolean {
  * (verified: `getText` uses `source.slice(startIndex)` which is a JS string operation).
  * Map captures onto a code-unit array and merge runs of same highlight class into `<span>`s.
  */
-function capturesToHtml(source: string, captures: QueryCapture[]): string {
+function buildHighlightIndex(source: string, captures: QueryCapture[]): (string | null)[] {
   const len = source.length
-  if (len === 0) return ''
-
   const bestPri = new Int16Array(len).fill(-1)
   const bestName = new Array<string | null>(len).fill(null)
 
@@ -94,6 +92,16 @@ function capturesToHtml(source: string, captures: QueryCapture[]): string {
       }
     }
   }
+  return bestName
+}
+
+function indexRangeToHtml(
+  source: string,
+  bestName: (string | null)[],
+  rangeStart: number,
+  rangeEnd: number,
+): string {
+  if (rangeStart >= rangeEnd) return ''
 
   const parts: string[] = []
   let buf = ''
@@ -111,18 +119,39 @@ function capturesToHtml(source: string, captures: QueryCapture[]): string {
     buf = ''
   }
 
-  for (let i = 0; i < len; i++) {
-    const name = bestName[i]
+  for (let i = rangeStart; i < rangeEnd; i++) {
+    const name = bestName[i]!
     if (activeName === undefined) {
       activeName = name
     } else if (name !== activeName) {
       flush()
       activeName = name
     }
-    buf += source[i]
+    buf += source[i]!
   }
   flush()
   return parts.join('')
+}
+
+function capturesToHtml(source: string, captures: QueryCapture[]): string {
+  const len = source.length
+  if (len === 0) return ''
+  const bestName = buildHighlightIndex(source, captures)
+  return indexRangeToHtml(source, bestName, 0, len)
+}
+
+/** Newline boundaries aligned with `diff` line chunks (each line excludes `\n`). */
+function sourceLineRangesForDiff(source: string): Array<{ start: number; end: number }> {
+  const lines: Array<{ start: number; end: number }> = []
+  let start = 0
+  for (let i = 0; i < source.length; i++) {
+    if (source[i] === '\n') {
+      lines.push({ start, end: i })
+      start = i + 1
+    }
+  }
+  lines.push({ start, end: source.length })
+  return lines
 }
 
 const JS_KEYWORDS = new Set([
@@ -367,5 +396,35 @@ export async function highlightJavaScriptToHtml(source: string): Promise<string>
     }
   } catch {
     return highlightJavaScriptRegexHtml(source)
+  }
+}
+
+/**
+ * Full-buffer Tree-sitter parse, then slice highlight by source line ranges (valid JS context preserved).
+ */
+export async function highlightJavaScriptLinesToHtml(source: string): Promise<string[]> {
+  const ranges = sourceLineRangesForDiff(source)
+  if (ranges.length === 0) return []
+
+  const mapRegex = () => ranges.map(({ start, end }) => highlightJavaScriptRegexHtml(source.slice(start, end)))
+
+  try {
+    const { parser, query } = await getJavaScriptHighlightEngine()
+    const tree = parser.parse(source)
+    if (!tree) return mapRegex()
+    try {
+      const captures = query.captures(tree.rootNode)
+      const bestName = buildHighlightIndex(source, captures)
+      const lines = ranges.map(({ start, end }) => indexRangeToHtml(source, bestName, start, end))
+      const joined = lines.join('')
+      if (!joined.includes('<span')) {
+        return mapRegex()
+      }
+      return lines
+    } finally {
+      tree.delete()
+    }
+  } catch {
+    return mapRegex()
   }
 }

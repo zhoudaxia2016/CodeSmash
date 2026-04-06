@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Check, ChevronRight, Copy, GitCompare } from 'lucide-react'
 import { useStickToBottomScroll } from '@/hooks/useStickToBottomScroll'
 import { CodeBlock } from '@/components/code-block'
@@ -16,7 +16,11 @@ import {
   splitThinkingFromModelCode,
   stripCodeFences,
 } from '@/lib/stripCodeFences'
-import { diffLines } from 'diff'
+import { diffLines, diffWordsWithSpace } from 'diff'
+import {
+  highlightJavaScriptLinesToHtml,
+  highlightJavaScriptRegexHtml,
+} from '@/lib/treeSitterJavaScript'
 
 /** Runnable-looking code for diff/copy（与下列 CodeCell 内提取逻辑一致）。 */
 export function comparableCodeFromRound(r: ModelRound | undefined): string {
@@ -60,29 +64,219 @@ function CopyModelCodeButton({ text }: { text: string }) {
   )
 }
 
-function CodeLineDiffPanel({ before, after }: { before: string; after: string }) {
+function splitDiffPartLines(raw: string): string[] {
+  return raw.endsWith('\n') ? raw.slice(0, -1).split('\n') : raw.split('\n')
+}
+
+function diffRowBackgroundClass(part: { added?: boolean; removed?: boolean }): string {
+  if (part.added) return 'bg-emerald-500/15 text-foreground'
+  if (part.removed) return 'bg-red-500/15 text-foreground'
+  return 'text-muted-foreground'
+}
+
+/** Inline styles so Tailwind purge cannot strip diff markup inside innerHTML. */
+const INLINE_DIFF_REMOVED =
+  'background-color:hsl(0 72% 45% / 0.32);border-radius:2px;padding:0 2px;margin:0 -1px'
+const INLINE_DIFF_ADDED =
+  'background-color:hsl(152 55% 36% / 0.32);border-radius:2px;padding:0 2px;margin:0 -1px'
+
+function inlineDiffMinusHtml(oldLine: string, newLine: string): string {
+  const chunks = diffWordsWithSpace(oldLine, newLine)
+  let out = ''
+  for (const p of chunks) {
+    if (p.added) continue
+    const body = highlightJavaScriptRegexHtml(p.value)
+    if (p.removed) {
+      out += `<span style="${INLINE_DIFF_REMOVED}">${body}</span>`
+    } else {
+      out += body
+    }
+  }
+  return out.length > 0 ? out : '&#160;'
+}
+
+function inlineDiffPlusHtml(oldLine: string, newLine: string): string {
+  const chunks = diffWordsWithSpace(oldLine, newLine)
+  let out = ''
+  for (const p of chunks) {
+    if (p.removed) continue
+    const body = highlightJavaScriptRegexHtml(p.value)
+    if (p.added) {
+      out += `<span style="${INLINE_DIFF_ADDED}">${body}</span>`
+    } else {
+      out += body
+    }
+  }
+  return out.length > 0 ? out : '&#160;'
+}
+
+type DiffViewRow = {
+  key: string
+  mark: string
+  lineCls: string
+  highlighted: boolean
+  innerHtml?: string
+  plainText?: string
+}
+
+function buildDiffViewRows(
+  before: string,
+  after: string,
+  beforeLineHtml: string[] | null,
+  afterLineHtml: string[] | null,
+): DiffViewRow[] {
   const parts = diffLines(before, after)
+  let bi = 0
+  let ai = 0
+  const rows: DiffViewRow[] = []
+
+  const pushOnePart = (part: (typeof parts)[number], pi: number) => {
+    const lines = splitDiffPartLines(part.value)
+    const mark = part.added ? '+' : part.removed ? '-' : ' '
+    const lineCls = diffRowBackgroundClass(part)
+    const useHtml = beforeLineHtml !== null && afterLineHtml !== null
+
+    lines.forEach((line, li) => {
+      const key = `${pi}-${li}-${mark}-${bi}-${ai}`
+
+      if (part.removed) {
+        const idx = bi++
+        const inner =
+          useHtml && beforeLineHtml![idx] !== undefined
+            ? beforeLineHtml![idx]!
+            : highlightJavaScriptRegexHtml(line)
+        rows.push({
+          key,
+          mark,
+          lineCls,
+          highlighted: useHtml,
+          innerHtml: inner || '&#160;',
+          plainText: line,
+        })
+        return
+      }
+
+      if (part.added) {
+        const idx = ai++
+        const inner =
+          useHtml && afterLineHtml![idx] !== undefined
+            ? afterLineHtml![idx]!
+            : highlightJavaScriptRegexHtml(line)
+        rows.push({
+          key,
+          mark,
+          lineCls,
+          highlighted: useHtml,
+          innerHtml: inner || '&#160;',
+          plainText: line,
+        })
+        return
+      }
+
+      const idx = ai++
+      bi++
+      const inner =
+        useHtml && afterLineHtml![idx] !== undefined
+          ? afterLineHtml![idx]!
+          : highlightJavaScriptRegexHtml(line)
+      rows.push({
+        key,
+        mark,
+        lineCls,
+        highlighted: useHtml,
+        innerHtml: inner || '&#160;',
+        plainText: line,
+      })
+    })
+  }
+
+  let pi = 0
+  while (pi < parts.length) {
+    const part = parts[pi]!
+    const next = parts[pi + 1]
+
+    if (part.removed && next?.added) {
+      const rLines = splitDiffPartLines(part.value)
+      const aLines = splitDiffPartLines(next.value)
+      if (rLines.length === aLines.length) {
+        for (let j = 0; j < rLines.length; j++) {
+          const oldL = rLines[j]!
+          const newL = aLines[j]!
+          rows.push({
+            key: `inl-${pi}-${j}-m-${bi}-${ai}`,
+            mark: '-',
+            lineCls: 'bg-red-500/15 text-foreground',
+            highlighted: true,
+            innerHtml: inlineDiffMinusHtml(oldL, newL),
+            plainText: oldL,
+          })
+          bi++
+          rows.push({
+            key: `inl-${pi}-${j}-p-${bi}-${ai}`,
+            mark: '+',
+            lineCls: 'bg-emerald-500/15 text-foreground',
+            highlighted: true,
+            innerHtml: inlineDiffPlusHtml(oldL, newL),
+            plainText: newL,
+          })
+          ai++
+        }
+        pi += 2
+        continue
+      }
+    }
+
+    pushOnePart(part, pi)
+    pi++
+  }
+
+  return rows
+}
+
+function CodeLineDiffPanel({ before, after }: { before: string; after: string }) {
+  const [rows, setRows] = useState<DiffViewRow[] | null>(null)
+  const plainFallbackRows = useMemo(
+    () => buildDiffViewRows(before, after, null, null),
+    [before, after],
+  )
+
+  useEffect(() => {
+    let alive = true
+    setRows(null)
+    void Promise.all([highlightJavaScriptLinesToHtml(before), highlightJavaScriptLinesToHtml(after)])
+      .then(([bh, ah]) => {
+        if (!alive) return
+        setRows(buildDiffViewRows(before, after, bh, ah))
+      })
+      .catch(() => {
+        if (!alive) return
+        setRows(null)
+      })
+    return () => {
+      alive = false
+    }
+  }, [before, after])
+
+  const displayRows = rows ?? plainFallbackRows
+
   return (
-    <div
-      className={`${CODE_BLOCK_INNER} max-h-[min(50vh,24rem)] overflow-auto rounded-md border border-border/70 bg-muted/20 p-2`}
-    >
+    <div className={`${CODE_BLOCK_INNER} max-h-[min(50vh,24rem)] overflow-auto rounded-md bg-muted/20 p-2`}>
       <pre className="m-0 whitespace-pre-wrap break-words font-mono text-xs leading-relaxed">
-        {parts.flatMap((part, pi) => {
-          const raw = part.value
-          const lines = raw.endsWith('\n') ? raw.slice(0, -1).split('\n') : raw.split('\n')
-          const mark = part.added ? '+' : part.removed ? '-' : ' '
-          const lineCls = part.added
-            ? 'bg-emerald-500/15 text-foreground'
-            : part.removed
-              ? 'bg-red-500/15 text-foreground'
-              : 'text-muted-foreground'
-          return lines.map((line, li) => (
-            <div key={`${pi}-${li}`} className={`px-1 ${lineCls}`}>
-              <span className="select-none tabular-nums text-muted-foreground/80">{mark} </span>
-              {line || '\u00a0'}
-            </div>
-          ))
-        })}
+        {displayRows.map((row) => (
+          <div key={row.key} className={`px-1 ${row.lineCls}`}>
+            <span className="select-none tabular-nums text-muted-foreground/80">{row.mark} </span>
+            {row.highlighted ? (
+              <code
+                className="code-highlight-root inline min-w-0 whitespace-pre-wrap break-words font-mono text-[inherit] leading-relaxed text-foreground"
+                dangerouslySetInnerHTML={{ __html: row.innerHtml ?? '&#160;' }}
+              />
+            ) : (
+              <code className="inline min-w-0 whitespace-pre-wrap break-words font-mono text-[inherit] leading-relaxed">
+                {row.plainText || '\u00a0'}
+              </code>
+            )}
+          </div>
+        ))}
       </pre>
     </div>
   )
@@ -295,10 +489,7 @@ export function CodeCell({
               ) : null}
               {codeForHighlight ? (
                 diffOpen && canDiff && previousComparableCode !== undefined ? (
-                  <div className="space-y-2">
-                    <p className="text-xs text-muted-foreground">对比上一轮代码（- 删除 / + 新增）</p>
-                    <CodeLineDiffPanel before={previousComparableCode} after={codeForHighlight} />
-                  </div>
+                  <CodeLineDiffPanel before={previousComparableCode} after={codeForHighlight} />
                 ) : (
                   <div className={CODE_BLOCK_INNER}>
                     <CodeBlock
