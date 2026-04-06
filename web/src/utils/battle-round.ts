@@ -1,5 +1,13 @@
 import type { ModelResult, ModelRound } from '@/types'
 
+/** 单侧每局最多追问次数（不含首轮模型生成）；与服务端 `battles` 路由一致。 */
+export const BATTLE_MAX_REFINES_PER_MODEL = 4
+
+/** `result.length` 为当前该模型侧轮次数（含首轮）。 */
+export function battleRefineLimitReached(resultLength: number): boolean {
+  return resultLength >= 1 + BATTLE_MAX_REFINES_PER_MODEL
+}
+
 export function officialMetrics(r: ModelRound) {
   const o = r.officialResult
   if (o) return { passed: o.passed, total: o.total }

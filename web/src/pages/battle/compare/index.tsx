@@ -4,6 +4,8 @@ import { api } from '@/api/client'
 import { useBattleModelSide } from '@/hooks/useBattleModelSide'
 import type { BattleSession, ModelResult, ProblemGradingContext, TestCase } from '@/types'
 import {
+  BATTLE_MAX_REFINES_PER_MODEL,
+  battleRefineLimitReached,
   battleRoundTabCountForModel,
   currentBattleRound,
   latestRoundLlmMayGrow,
@@ -156,29 +158,38 @@ export function Compare({
 
   const battleBusy = battleStatus === 'running'
 
-  const refineDisabledA = battleBusy || !latestA || !hookA.ok || lenA === 0
-  const refineDisabledB = battleBusy || !latestB || !hookB.ok || lenB === 0
+  const refineAtLimitA = submitOfficialToServer && battleRefineLimitReached(lenA)
+  const refineAtLimitB = submitOfficialToServer && battleRefineLimitReached(lenB)
+
+  const refineDisabledA =
+    battleBusy || refineAtLimitA || !latestA || !hookA.ok || lenA === 0
+  const refineDisabledB =
+    battleBusy || refineAtLimitB || !latestB || !hookB.ok || lenB === 0
 
   const refineTitleA =
     refineBridgeA && refineDisabledA
       ? battleBusy
         ? '生成中，请稍候'
-        : !latestA
-          ? '请切换到最新一轮后再追问'
-          : !hookA.ok
-            ? '请先完成本轮评测后再追问'
-            : '暂不可追问'
+        : refineAtLimitA
+          ? `该模型本场最多追问 ${BATTLE_MAX_REFINES_PER_MODEL} 次`
+          : !latestA
+            ? '请切换到最新一轮后再追问'
+            : !hookA.ok
+              ? '请先完成本轮评测后再追问'
+              : '暂不可追问'
       : undefined
 
   const refineTitleB =
     refineBridgeB && refineDisabledB
       ? battleBusy
         ? '生成中，请稍候'
-        : !latestB
-          ? '请切换到最新一轮后再追问'
-          : !hookB.ok
-            ? '请先完成本轮评测后再追问'
-            : '暂不可追问'
+        : refineAtLimitB
+          ? `该模型本场最多追问 ${BATTLE_MAX_REFINES_PER_MODEL} 次`
+          : !latestB
+            ? '请切换到最新一轮后再追问'
+            : !hookB.ok
+              ? '请先完成本轮评测后再追问'
+              : '暂不可追问'
       : undefined
 
   const prevCodeA =

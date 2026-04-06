@@ -34,6 +34,9 @@ import { loadProblemForBattle } from './problems.ts'
 
 const battlesRouter = new Hono<{ Variables: { user?: SessionUser } }>()
 
+/** 单侧每局最多追问次数（不含首轮模型生成）。 */
+const BATTLE_MAX_REFINES_PER_MODEL_SIDE = 4
+
 export type BattlePhase =
   | 'pending'
   | 'analyzing'
@@ -707,6 +710,18 @@ battlesRouter.post('/:id/refine', async (c) => {
   const last = target.result[target.result.length - 1]
   if (last.phase !== 'completed' || last.officialResult == null) {
     return c.json({ error: 'Current round must be completed with official results before refine' }, 400)
+  }
+
+  if (target.result.length >= 1 + BATTLE_MAX_REFINES_PER_MODEL_SIDE) {
+    return c.json(
+      {
+        error: '追问次数已达上限',
+        message: `每个模型本场对战最多追问 ${BATTLE_MAX_REFINES_PER_MODEL_SIDE} 次`,
+        code: 'BATTLE_REFINE_LIMIT_EXCEEDED',
+        limit: BATTLE_MAX_REFINES_PER_MODEL_SIDE,
+      },
+      400,
+    )
   }
 
   const problem = await loadProblemForBattle(battle.problemId)
