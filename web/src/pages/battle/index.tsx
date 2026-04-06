@@ -7,6 +7,7 @@ import { useMe, useProblem, useStartBattle, useBattle } from '@/hooks/useApi'
 import { usePersistProblemEditorUpdate } from '@/hooks/usePersistProblemEditorUpdate'
 import type { PlatformModel, Problem, ProblemGradingContext } from '@/types'
 import { removeLocalBattleEntry, saveBattleToLocalHistory } from '@/utils/battle-local-history'
+import { loadBattleSetupPrefs, saveBattleSetupPrefs } from '@/utils/battle-setup-prefs'
 import { loadBattleSyncPrefs } from '@/utils/battle-sync-prefs'
 import { defaultAuthoringModelId } from '@/lib/authoring-model'
 import { ProblemEditor, type ProblemEditorProps } from '@/components/problem-editor'
@@ -98,10 +99,16 @@ export function Battle({
   }, [])
 
   useEffect(() => {
-    if (problems.length > 0 && !selectedProblem) {
-      setSelectedProblem(problems[0].id)
-    }
-  }, [problems, selectedProblem])
+    if (problems.length === 0) return
+    setSelectedProblem((prev) => {
+      if (prev && problems.some((p) => p.id === prev)) return prev
+      const prefs = loadBattleSetupPrefs()
+      if (prefs.problemId && problems.some((p) => p.id === prefs.problemId)) {
+        return prefs.problemId
+      }
+      return problems[0].id
+    })
+  }, [problems])
 
   useEffect(() => {
     setProblemDetailOpen(false)
@@ -200,19 +207,43 @@ export function Battle({
 
   useEffect(() => {
     if (selectableModels.length === 0) return
-    if (!modelA || !selectableModels.some((m) => m.id === modelA)) {
-      setModelA(selectableModels[0].id)
-    }
-  }, [selectableModels, modelA])
+    setModelA((prev) => {
+      if (prev && selectableModels.some((m) => m.id === prev)) return prev
+      const prefs = loadBattleSetupPrefs()
+      if (prefs.modelAId && selectableModels.some((m) => m.id === prefs.modelAId)) {
+        return prefs.modelAId
+      }
+      return selectableModels[0].id
+    })
+  }, [selectableModels])
 
   useEffect(() => {
     if (selectableModels.length === 0) return
-    const a = modelA || selectableModels[0].id
-    if (!modelB || !selectableModels.some((m) => m.id === modelB) || modelB === a) {
-      const alt = selectableModels.find((m) => m.id !== a)
-      setModelB(alt?.id ?? selectableModels[0].id)
-    }
-  }, [selectableModels, modelB, modelA])
+    const prefs = loadBattleSetupPrefs()
+    const resolvedA =
+      (modelA && selectableModels.some((m) => m.id === modelA) ? modelA : null) ??
+      (prefs.modelAId && selectableModels.some((m) => m.id === prefs.modelAId) ? prefs.modelAId : null) ??
+      selectableModels[0].id
+
+    setModelB((prev) => {
+      const valid = (id: string) => selectableModels.some((m) => m.id === id)
+      if (prev && valid(prev) && prev !== resolvedA) return prev
+      if (prefs.modelBId && valid(prefs.modelBId) && prefs.modelBId !== resolvedA) return prefs.modelBId
+      const alt = selectableModels.find((m) => m.id !== resolvedA)
+      return alt?.id ?? selectableModels[0].id
+    })
+  }, [selectableModels, modelA])
+
+  useEffect(() => {
+    if (!selectedProblem || !problems.some((p) => p.id === selectedProblem)) return
+    if (!modelA || !modelB || modelA === modelB) return
+    if (!selectableModels.some((m) => m.id === modelA) || !selectableModels.some((m) => m.id === modelB)) return
+    saveBattleSetupPrefs({
+      problemId: selectedProblem,
+      modelAId: modelA,
+      modelBId: modelB,
+    })
+  }, [selectedProblem, modelA, modelB, problems, selectableModels])
 
   const canStart =
     !!selectedProblem &&
