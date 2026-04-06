@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Plus, Trash2, X } from 'lucide-react'
+import { ExternalLink, Plus, Trash2, X } from 'lucide-react'
 import { useProblemAuthoringAssist } from '@/hooks/useProblemAuthoringAssist'
 import type {
   GradingMode,
@@ -10,6 +10,10 @@ import type {
 } from '@/types'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import {
+  buildExternalCodingPrompt,
+  DEEPSEEK_CHAT_URL,
+} from '@/utils/external-coding-prompt'
 import { parseRowsToTestCases, type TestCaseRow } from '@/utils/test-case-rows'
 import { ProblemAuthoringAssistPanel } from './authoring-assist-panel'
 import { ProblemFormFields, ProblemGradingBlock } from './core-fields'
@@ -441,6 +445,29 @@ export function ProblemEditorForm({
     }
   }
 
+  const isProblemDetailLoaded = mode === 'edit' && !!detail
+
+  const copyPromptOpenDeepSeek = async () => {
+    setError(null)
+    const text = buildExternalCodingPrompt({
+      title,
+      description,
+      tags,
+      entryPoint,
+      functionSignature,
+      gradingMode,
+      verifySource: gradingMode === 'verify' ? verifySource : '',
+      rows,
+    })
+    try {
+      await navigator.clipboard.writeText(text)
+    } catch {
+      setError('无法复制到剪贴板，请检查浏览器权限')
+      return
+    }
+    window.open(DEEPSEEK_CHAT_URL, '_blank', 'noopener,noreferrer')
+  }
+
   const showForm = mode === 'create' || (!loading && !loadFailed && detail)
   const showFooter = mode === 'create' || (!loading && !loadFailed && detail)
 
@@ -630,17 +657,33 @@ export function ProblemEditorForm({
       </div>
 
       {showFooter && (
-        <footer className="flex shrink-0 justify-end gap-2 border-t border-border bg-card px-5 py-3">
-          {onCancel && (
-            <Button type="button" variant="outline" size="sm" onClick={onCancel}>
-              {cancelLabel}
-            </Button>
-          )}
-          {!viewOnly && (
-            <Button type="button" size="sm" disabled={pending} onClick={() => void handleSubmit()}>
-              {pending ? '保存中…' : submitLabel ?? defaultSubmit}
-            </Button>
-          )}
+        <footer className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-border bg-card px-5 py-3">
+          <div className="flex flex-wrap items-center gap-2">
+            {isProblemDetailLoaded && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="gap-1"
+                onClick={() => void copyPromptOpenDeepSeek()}
+              >
+                <ExternalLink className="h-3.5 w-3.5" />
+                复制题面并在 DeepSeek 提问
+              </Button>
+            )}
+          </div>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            {onCancel && (
+              <Button type="button" variant="outline" size="sm" onClick={onCancel}>
+                {cancelLabel}
+              </Button>
+            )}
+            {!viewOnly && (
+              <Button type="button" size="sm" disabled={pending} onClick={() => void handleSubmit()}>
+                {pending ? '保存中…' : submitLabel ?? defaultSubmit}
+              </Button>
+            )}
+          </div>
         </footer>
       )}
     </div>
