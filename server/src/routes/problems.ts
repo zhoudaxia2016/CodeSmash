@@ -1,6 +1,8 @@
 import { Hono } from 'hono'
 import type { SessionUser } from '../db/userSessionsRepo.ts'
 import { getLibsqlClient } from '../db/client.ts'
+import { getBattleLlmConfig } from '../db/modelsRepo.ts'
+import { SEED_MODEL_UUID } from '../db/modelSeedUuids.ts'
 import {
   createProblem,
   createTestCase,
@@ -21,11 +23,6 @@ import { generateProblemAuthoring } from '../lib/llm.ts'
 import { getSessionUser, requireAuth } from '../middleware/requireAuth.ts'
 
 const problemsRouter = new Hono<{ Variables: { user?: SessionUser } }>()
-
-function modelProviderFromModelId(modelId: string): 'minimax' | 'deepseek' {
-  if (modelId.startsWith('minimax')) return 'minimax'
-  return 'deepseek'
-}
 
 function problemToJson(p: ProblemRecord) {
   return {
@@ -92,8 +89,18 @@ problemsRouter.post('/authoring', async (c) => {
     }
   }
 
-  const modelId = body.modelId?.trim() || 'deepseek-chat'
-  const provider = modelProviderFromModelId(modelId)
+  const client = getLibsqlClient()
+  const modelId = body.modelId?.trim() || SEED_MODEL_UUID.deepseek
+  const cfg = await getBattleLlmConfig(client, modelId)
+  if (!cfg) {
+    return c.json(
+      {
+        error: 'invalid_or_disabled_model',
+        message: '模型无效或未启用，请换一个已启用的模型',
+      },
+      400,
+    )
+  }
 
   try {
     const assistGradingFromForm = body.assistGradingFromForm === true
@@ -101,8 +108,8 @@ problemsRouter.post('/authoring', async (c) => {
       body.formGradingMode === 'verify' ? 'verify' : 'expected'
 
     const parsed = await generateProblemAuthoring(
-      provider,
-      modelId,
+      cfg.provider,
+      cfg.model,
       {
         title: body.title?.trim() || undefined,
         description: body.description?.trim() || undefined,

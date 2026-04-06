@@ -1,19 +1,15 @@
 export interface PlatformModel {
   id: string
   name: string
-  description?: string
   provider: string
   enabled: boolean
 }
 
-/** Full row from GET /admin/models (includes disabled). */
 export type AdminPlatformModel = {
   id: string
   name: string
-  description: string
   provider: string
   enabled: boolean
-  sortOrder: number
   createdAt: string
 }
 

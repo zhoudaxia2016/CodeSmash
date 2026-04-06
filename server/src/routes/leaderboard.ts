@@ -69,7 +69,7 @@ leaderboardRouter.get('/', async (c) => {
     const passRate = a.totalSum > 0 ? a.passedSum / a.totalSum : 0
     entries.push({
       modelId: id,
-      modelName: id,
+      modelName: '未知模型',
       problemId: global ? undefined : problemId,
       global,
       passRate,

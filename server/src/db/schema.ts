@@ -1,6 +1,10 @@
 import type { Client } from '@libsql/client'
 import { migrateExpectedAnsJsonValue } from '../lib/expectedAnsAlternatives.ts'
 import { getLibsqlClient } from './client.ts'
+import { migrateDropModelsApiModelIfNeeded } from './migrateDropModelsApiModel.ts'
+import { migrateDropModelsDescriptionIfNeeded } from './migrateDropModelsDescription.ts'
+import { migrateDropModelsSortOrderIfNeeded } from './migrateDropModelsSortOrder.ts'
+import { migrateModelIdsToUuidIfNeeded } from './migrateModelIdsToUuid.ts'
 import { seedModelsIfEmpty } from './modelsRepo.ts'
 import { ensureOfficialTestCasesPresent, seedProblemsIfEmpty } from './problemsRepo.ts'
 
@@ -284,10 +288,8 @@ export async function initDb(): Promise<void> {
         sql: `CREATE TABLE IF NOT EXISTS models (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
-  description TEXT NOT NULL DEFAULT '',
   provider TEXT NOT NULL,
   enabled INTEGER NOT NULL DEFAULT 1,
-  sort_order INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL
 )`,
         args: [],
@@ -303,7 +305,11 @@ export async function initDb(): Promise<void> {
   await migrateLlmCallLogsDropOutputText(client)
   await migrateAddProblemsCreatedBy(client)
 
+  await migrateDropModelsApiModelIfNeeded(client)
+  await migrateDropModelsSortOrderIfNeeded(client)
+  await migrateDropModelsDescriptionIfNeeded(client)
   await seedModelsIfEmpty(client)
+  await migrateModelIdsToUuidIfNeeded(client)
   await seedProblemsIfEmpty(client)
   await ensureOfficialTestCasesPresent(client)
   await migrateExpectedAnsToAlternativesArray(client)

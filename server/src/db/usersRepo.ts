@@ -24,6 +24,28 @@ function rowToUser(r: Record<string, unknown>): UserRecord {
   }
 }
 
+/**
+ * Align `users.role` with current `ADMIN_GITHUB_IDS` (no OAuth required).
+ * Call from GET /auth/me so env / server restarts take effect on next session check.
+ */
+export async function reconcileUserAdminRoleFromEnv(
+  client: Client,
+  userId: string,
+  adminGithubIds: Set<string>,
+): Promise<UserRecord | null> {
+  const user = await getUserById(client, userId)
+  if (!user) return null
+  const nextRole = adminGithubIds.has(user.githubId) ? 'admin' : ''
+  if (user.role === nextRole) return user
+  const now = new Date().toISOString()
+  await client.execute({
+    sql: 'UPDATE users SET role = ?, updated_at = ? WHERE id = ?',
+    args: [nextRole, now, userId],
+  })
+  const again = await getUserById(client, userId)
+  return again
+}
+
 export async function getUserById(client: Client, id: string): Promise<UserRecord | null> {
   const res = await client.execute({
     sql: 'SELECT * FROM users WHERE id = ?',

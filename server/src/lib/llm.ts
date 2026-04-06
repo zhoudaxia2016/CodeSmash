@@ -93,11 +93,86 @@ const PROVIDERS = {
   },
 } as const
 
-function resolveApiModel(provider: 'minimax' | 'deepseek', _platformModelId: string): string {
-  if (provider === 'deepseek') {
-    return Deno.env.get('DEEPSEEK_MODEL') || 'deepseek-chat'
+export async function verifyVendorChatModel(
+  provider: 'minimax' | 'deepseek',
+  model: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const config = PROVIDERS[provider]
+  if (!config.apiKey) {
+    return { ok: false, error: `${provider} API key 未配置` }
   }
-  return Deno.env.get('MINIMAX_MODEL') || 'MiniMax-M2.7'
+  if (!model) {
+    return { ok: false, error: 'model 不能为空' }
+  }
+  try {
+    const response = await fetch(`${config.baseUrl}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${config.apiKey}`,
+      },
+      body: JSON.stringify({
+        model,
+        messages: [{ role: 'user', content: '.' }],
+        max_tokens: 1,
+        stream: false,
+      }),
+    })
+    if (!response.ok) {
+      const t = await response.text()
+      return {
+        ok: false,
+        error: `厂商校验失败 (${provider} HTTP ${response.status}): ${t.slice(0, 400)}`,
+      }
+    }
+    return { ok: true }
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) }
+  }
+}
+
+export async function listVendorChatModelIds(
+  provider: 'minimax' | 'deepseek',
+): Promise<Set<string> | null> {
+  const config = PROVIDERS[provider]
+  if (!config.apiKey) return null
+  try {
+    const base = config.baseUrl.replace(/\/$/, '')
+    const response = await fetch(`${base}/models`, {
+      headers: { Authorization: `Bearer ${config.apiKey}` },
+    })
+    if (!response.ok) return null
+    const json: unknown = await response.json()
+    if (!json || typeof json !== 'object' || !('data' in json)) return null
+    const data = (json as { data: unknown }).data
+    if (!Array.isArray(data) || data.length === 0) return null
+    const ids = new Set<string>()
+    for (const item of data) {
+      if (item && typeof item === 'object' && 'id' in item) {
+        const id = (item as { id?: unknown }).id
+        if (typeof id === 'string' && id.length > 0) ids.add(id)
+      }
+    }
+    return ids.size > 0 ? ids : null
+  } catch {
+    return null
+  }
+}
+
+export async function assertVendorModelNameAllowed(
+  provider: 'minimax' | 'deepseek',
+  name: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const ids = await listVendorChatModelIds(provider)
+  if (ids) {
+    if (ids.has(name)) return { ok: true }
+    const sample = [...ids].slice(0, 12).join(', ')
+    return {
+      ok: false,
+      error: `模型名不在厂商列表中（GET …/models）。示例: ${sample}${ids.size > 12 ? ' …' : ''}`,
+    }
+  }
+  return verifyVendorChatModel(provider, name)
 }
 
 /** One SSE `delta` slice before merging into `LlmCallOutputJson`. */
@@ -187,7 +262,7 @@ function messageToLlmCallOutputJson(msg: unknown): LlmCallOutputJson {
 
 async function* streamChatParts(
   provider: 'minimax' | 'deepseek',
-  platformModelId: string,
+  model: string,
   messages: ChatMessage[],
   options: StreamLlmOptions,
 ): AsyncGenerator<ChatStreamPart, void, unknown> {
@@ -198,7 +273,6 @@ async function* streamChatParts(
   const t0 = Date.now()
 
   let shouldPersist = false
-  let apiModel = ''
   let streamSucceeded = false
   const outputMerged: LlmCallOutputJson = { mode: 'stream' }
   let persistError: string | null = null
@@ -218,7 +292,7 @@ async function* streamChatParts(
       source: options.source,
       source_id: options.sourceId ?? null,
       provider,
-      model: apiModel,
+      model,
       messages: messagesJson,
       output_json,
       error: streamSucceeded ? null : persistError,
@@ -232,11 +306,13 @@ async function* streamChatParts(
       throw new Error(`${provider} API key not configured`)
     }
 
-    apiModel = resolveApiModel(provider, platformModelId)
+    if (!model) {
+      throw new Error(`${provider}: model is required`)
+    }
     shouldPersist = true
 
     console.log(
-      `[llm]${tag} request provider=${provider} upstreamModel=${apiModel} platformModelId=${platformModelId} url=${config.baseUrl}/chat/completions`,
+      `[llm]${tag} request provider=${provider} model=${model} url=${config.baseUrl}/chat/completions`,
     )
     logChatPrompts(tag, messages)
 
@@ -247,7 +323,7 @@ async function* streamChatParts(
         'Authorization': `Bearer ${config.apiKey}`,
       },
       body: JSON.stringify({
-        model: apiModel,
+        model,
         messages,
         max_tokens: 4096,
         stream: true,
@@ -525,7 +601,7 @@ export function buildBattleClosedRoundsHistoryMessages(
 
 export async function* streamBattleRefineAnalysis(
   provider: 'minimax' | 'deepseek',
-  platformModelId: string,
+  model: string,
   historyThroughLastCodeAssistant: ChatMessage[],
   officialPlusRefineUserContent: string,
   options: StreamLlmOptions,
@@ -536,7 +612,7 @@ export async function* streamBattleRefineAnalysis(
     ...historyThroughLastCodeAssistant,
     { role: 'user', content: officialPlusRefineUserContent },
   ]
-  for await (const part of streamChatParts(provider, platformModelId, messages, {
+  for await (const part of streamChatParts(provider, model, messages, {
     ...options,
     logLabel,
   })) {
@@ -546,7 +622,7 @@ export async function* streamBattleRefineAnalysis(
 
 export async function* streamBattleRefineCode(
   provider: 'minimax' | 'deepseek',
-  platformModelId: string,
+  model: string,
   problem: ProblemPayload,
   historyThroughLastCodeAssistant: ChatMessage[],
   officialPlusRefineUserContent: string,
@@ -562,12 +638,12 @@ export async function* streamBattleRefineCode(
     { role: 'assistant', content: assistantAnalysis },
     { role: 'user', content: buildCodePhaseInstructionUserContent(problem) },
   ]
-  yield* streamChatParts(provider, platformModelId, messages, { ...options, logLabel })
+  yield* streamChatParts(provider, model, messages, { ...options, logLabel })
 }
 
 export async function* streamProblemAnalysis(
   provider: 'minimax' | 'deepseek',
-  platformModelId: string,
+  model: string,
   problem: ProblemPayload,
   gradingMode: 'expected' | 'verify',
   options: StreamLlmOptions,
@@ -577,7 +653,7 @@ export async function* streamProblemAnalysis(
   const logLabel = options.logLabel
     ? `${options.logLabel} analysis`
     : 'analysis'
-  for await (const part of streamChatParts(provider, platformModelId, [
+  for await (const part of streamChatParts(provider, model, [
     { role: 'system', content: ANALYSIS_SYSTEM },
     { role: 'user', content: user },
   ], { ...options, logLabel })) {
@@ -591,7 +667,7 @@ export async function* streamProblemAnalysis(
  */
 export async function* streamProblemCode(
   provider: 'minimax' | 'deepseek',
-  platformModelId: string,
+  model: string,
   problem: ProblemPayload,
   gradingMode: 'expected' | 'verify',
   analysis: string,
@@ -602,7 +678,7 @@ export async function* streamProblemCode(
   const codeUser = buildCodePhaseInstructionUserContent(problem)
 
   const logLabel = options.logLabel ? `${options.logLabel} code` : 'code'
-  yield* streamChatParts(provider, platformModelId, [
+  yield* streamChatParts(provider, model, [
     { role: 'system', content: buildCodeSystem(problem.entryPoint, problem.functionSignature) },
     { role: 'user', content: analysisPhaseUser },
     { role: 'assistant', content: assistantAnalysis },
@@ -740,7 +816,7 @@ function extractCompletionMessageContent(json: unknown): string {
 
 async function chatCompletionContent(
   provider: 'minimax' | 'deepseek',
-  platformModelId: string,
+  model: string,
   messages: ChatMessage[],
   options: StreamLlmOptions,
 ): Promise<string> {
@@ -748,7 +824,9 @@ async function chatCompletionContent(
   if (!config.apiKey) {
     throw new Error(`${provider} API key not configured`)
   }
-  const apiModel = resolveApiModel(provider, platformModelId)
+  if (!model) {
+    throw new Error(`${provider}: model is required`)
+  }
   const tag = options.logLabel ? ` ${options.logLabel}` : ''
   logChatPrompts(tag, messages)
 
@@ -769,7 +847,7 @@ async function chatCompletionContent(
       source: options.source,
       source_id: options.sourceId ?? null,
       provider,
-      model: apiModel,
+      model,
       messages: serializeMessagesForDb(messages, maxMessagesCharsForDb()),
       output_json: streamSucceeded
         ? serializeLlmOutputJsonForDb(completionOutputJson, maxOutputCharsForDb())
@@ -787,7 +865,7 @@ async function chatCompletionContent(
         'Authorization': `Bearer ${config.apiKey}`,
       },
       body: JSON.stringify({
-        model: apiModel,
+        model,
         messages,
         max_tokens: 4096,
         stream: false,
@@ -1030,7 +1108,7 @@ function buildProblemAuthoringUserContent(input: {
 
 export async function generateProblemAuthoring(
   provider: 'minimax' | 'deepseek',
-  platformModelId: string,
+  model: string,
   input: {
     title?: string
     description?: string
@@ -1062,7 +1140,7 @@ export async function generateProblemAuthoring(
   })
   const raw = await chatCompletionContent(
     provider,
-    platformModelId,
+    model,
     [
       { role: 'system', content: systemContent },
       {

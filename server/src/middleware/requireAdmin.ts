@@ -2,6 +2,8 @@ import type { Context, Next } from 'hono'
 import { getCookie } from 'hono/cookie'
 import { getLibsqlClient } from '../db/client.ts'
 import { findUserBySessionId } from '../db/userSessionsRepo.ts'
+import { reconcileUserAdminRoleFromEnv } from '../db/usersRepo.ts'
+import { parseAdminGithubIds } from '../lib/adminEnv.ts'
 import { SESSION_COOKIE } from './requireAuth.ts'
 
 export async function requireAdmin(c: Context, next: Next) {
@@ -10,9 +12,19 @@ export async function requireAdmin(c: Context, next: Next) {
     return c.json({ error: 'Unauthorized', message: '请先登录' }, 401)
   }
   const client = getLibsqlClient()
-  const user = await findUserBySessionId(client, sid)
+  let user = await findUserBySessionId(client, sid)
   if (!user) {
     return c.json({ error: 'Unauthorized', message: '会话已过期，请重新登录' }, 401)
+  }
+  const synced = await reconcileUserAdminRoleFromEnv(client, user.id, parseAdminGithubIds())
+  if (synced) {
+    user = {
+      id: synced.id,
+      login: synced.login,
+      name: synced.name,
+      avatarUrl: synced.avatarUrl,
+      role: synced.role,
+    }
   }
   if (user.role !== 'admin') {
     return c.json({ error: 'Forbidden', message: '需要管理员权限' }, 403)

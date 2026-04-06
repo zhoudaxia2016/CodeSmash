@@ -3,7 +3,7 @@ import { Hono } from 'hono'
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie'
 import { getLibsqlClient } from '../db/client.ts'
 import { createUserSession, deleteUserSession, findUserBySessionId } from '../db/userSessionsRepo.ts'
-import { upsertUserFromGithub } from '../db/usersRepo.ts'
+import { reconcileUserAdminRoleFromEnv, upsertUserFromGithub } from '../db/usersRepo.ts'
 import { parseAdminGithubIds } from '../lib/adminEnv.ts'
 import {
   parseAllowedFrontendOrigins,
@@ -291,10 +291,20 @@ authRouter.get('/me', async (c) => {
     return c.json({ user: null })
   }
   const client = getLibsqlClient()
-  const user = await findUserBySessionId(client, sid)
+  let user = await findUserBySessionId(client, sid)
   if (!user) {
     deleteCookie(c, SESSION_COOKIE, cookieBaseOpts())
     return c.json({ user: null })
+  }
+  const synced = await reconcileUserAdminRoleFromEnv(client, user.id, parseAdminGithubIds())
+  if (synced) {
+    user = {
+      id: synced.id,
+      login: synced.login,
+      name: synced.name,
+      avatarUrl: synced.avatarUrl,
+      role: synced.role,
+    }
   }
   return c.json({
     user: {

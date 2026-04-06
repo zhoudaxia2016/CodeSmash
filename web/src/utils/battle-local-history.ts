@@ -1,4 +1,5 @@
 import type { AuthUser, BattleSession } from '@/types'
+import { migrateLegacyModelIdsInStoredBattle } from '@/utils/legacyModelIds'
 
 const STORAGE_KEY = 'codesmash:battle-history'
 
@@ -54,7 +55,11 @@ export function loadLocalBattleHistory(): LocalBattleHistoryEntry[] {
     if (!Array.isArray(parsed)) return []
     const list = parsed.map(parseEntry).filter((e): e is LocalBattleHistoryEntry => e != null)
     const pruned = list.filter((e) => e.syncedAt == null)
-    if (pruned.length !== list.length) {
+    let idMigrated = false
+    for (const e of pruned) {
+      if (migrateLegacyModelIdsInStoredBattle(e.battle)) idMigrated = true
+    }
+    if (pruned.length !== list.length || idMigrated) {
       writeAll(pruned)
     }
     return pruned

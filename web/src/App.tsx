@@ -250,22 +250,47 @@ function App() {
             排行榜
           </button>
           {user?.role === 'admin' && (
-            <button
-              type="button"
-              onClick={() => navigate({ view: 'admin' })}
-              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors text-left ${
-                view === 'admin'
-                  ? 'bg-arena-sidebar-active text-arena-sidebar-active-fg shadow-arena'
-                  : 'text-arena-sidebar-foreground hover:bg-arena-sidebar-active/60 hover:text-foreground'
-              }`}
-            >
-              <span
-                className={`w-2 h-2 rounded-full shrink-0 ${
-                  view === 'admin' ? 'bg-amber-400/90' : 'bg-muted-foreground/40'
+            <div className="mt-1 space-y-0.5">
+              <p className="px-3 pt-1 pb-0.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                管理后台
+              </p>
+              <button
+                type="button"
+                onClick={() => navigate({ view: 'admin', adminTab: 'models' })}
+                className={`flex w-full items-center gap-3 rounded-lg py-2 pl-6 pr-3 text-sm font-medium transition-colors text-left ${
+                  view === 'admin' && adminTab === 'models'
+                    ? 'bg-arena-sidebar-active text-arena-sidebar-active-fg shadow-arena'
+                    : 'text-arena-sidebar-foreground hover:bg-arena-sidebar-active/60 hover:text-foreground'
                 }`}
-              />
-              Admin
-            </button>
+              >
+                <span
+                  className={`h-2 w-2 shrink-0 rounded-full ${
+                    view === 'admin' && adminTab === 'models'
+                      ? 'bg-amber-400/90'
+                      : 'bg-muted-foreground/40'
+                  }`}
+                />
+                模型
+              </button>
+              <button
+                type="button"
+                onClick={() => navigate({ view: 'admin', adminTab: 'logs' })}
+                className={`flex w-full items-center gap-3 rounded-lg py-2 pl-6 pr-3 text-sm font-medium transition-colors text-left ${
+                  view === 'admin' && adminTab === 'logs'
+                    ? 'bg-arena-sidebar-active text-arena-sidebar-active-fg shadow-arena'
+                    : 'text-arena-sidebar-foreground hover:bg-arena-sidebar-active/60 hover:text-foreground'
+                }`}
+              >
+                <span
+                  className={`h-2 w-2 shrink-0 rounded-full ${
+                    view === 'admin' && adminTab === 'logs'
+                      ? 'bg-amber-400/90'
+                      : 'bg-muted-foreground/40'
+                  }`}
+                />
+                日志
+              </button>
+            </div>
           )}
         </nav>
 
@@ -347,7 +372,7 @@ function App() {
             ) : view === 'battleHistory' ? (
               <h1 className="text-xl font-semibold tracking-tight text-foreground">对战历史</h1>
             ) : view === 'admin' ? (
-              <h1 className="text-xl font-semibold tracking-tight text-foreground">后台</h1>
+              <h1 className="text-xl font-semibold tracking-tight text-foreground">管理后台</h1>
             ) : (
               <h1 className="text-xl font-semibold tracking-tight text-foreground">排行榜</h1>
             )}
@@ -367,9 +392,7 @@ function App() {
             {view === 'battleHistory' && <BattleHistory />}
             {view === 'problems' && <ProblemsPage />}
             {view === 'leaderboard' && <LeaderboardPage />}
-            {view === 'admin' && user?.role === 'admin' && (
-              <Admin tab={adminTab} onTabChange={(t) => navigate({ adminTab: t })} />
-            )}
+            {view === 'admin' && user?.role === 'admin' && <Admin tab={adminTab} />}
             {view === 'admin' && user?.role !== 'admin' && (
               <p className="text-sm text-muted-foreground">需要管理员权限。</p>
             )}

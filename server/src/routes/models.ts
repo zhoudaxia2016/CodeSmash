@@ -8,7 +8,6 @@ function toApiModel(m: Awaited<ReturnType<typeof listModels>>[number]) {
   return {
     id: m.id,
     name: m.name,
-    description: m.description || undefined,
     provider: m.provider,
     enabled: m.enabled,
   }

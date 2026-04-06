@@ -80,12 +80,9 @@ export const api = {
   },
 
   async createAdminModel(body: {
-    id: string
     name: string
-    description?: string
     provider: string
     enabled?: boolean
-    sortOrder?: number
   }): Promise<{ model: AdminPlatformModel }> {
     const res = await apiFetch(`${API_BASE}/admin/models`, {
       method: 'POST',
@@ -98,11 +95,8 @@ export const api = {
   async patchAdminModel(
     id: string,
     patch: Partial<{
-      name: string
-      description: string
       provider: string
       enabled: boolean
-      sortOrder: number
     }>,
   ): Promise<{ model: AdminPlatformModel }> {
     const res = await apiFetch(`${API_BASE}/admin/models/${encodeURIComponent(id)}`, {

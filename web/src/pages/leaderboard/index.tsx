@@ -1,5 +1,4 @@
-import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from 'react'
-import { Button } from '@/components/ui/button'
+import { useEffect, useMemo, useState } from 'react'
 import {
   Select,
   SelectContent,
@@ -7,24 +6,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import {
-  useAdminModels,
-  useCreateAdminModel,
-  useDeleteAdminModel,
-  useLeaderboard,
-  useMe,
-  usePatchAdminModel,
-  useProblems,
-} from '@/hooks/useApi'
+import { useQueryClient } from '@tanstack/react-query'
+import { useLeaderboard, useMe, useProblems } from '@/hooks/useApi'
 import type { LeaderboardEntry } from '@/types'
 
 function pct(n: number): string {
   if (!Number.isFinite(n)) return '—'
   return `${(n * 100).toFixed(1)}%`
 }
-
-const inputClass =
-  'h-9 w-full rounded-md border border-border/80 bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40'
 
 type SortCol = 'passRate' | 'avgTimeMs'
 
@@ -86,6 +75,7 @@ function SortableTh({
 }
 
 export function LeaderboardPage() {
+  const queryClient = useQueryClient()
   const { data: meData } = useMe()
   const user = meData?.user ?? null
   const isAdmin = user?.role === 'admin'
@@ -104,38 +94,6 @@ export function LeaderboardPage() {
     problemId: problemId || undefined,
     scope,
   })
-
-  const adminModelsQ = useAdminModels(isAdmin)
-  const createModel = useCreateAdminModel()
-  const patchModel = usePatchAdminModel()
-  const deleteModel = useDeleteAdminModel()
-
-  const [newId, setNewId] = useState('')
-  const [newName, setNewName] = useState('')
-  const [newDesc, setNewDesc] = useState('')
-  const [newProvider, setNewProvider] = useState<'minimax' | 'deepseek'>('deepseek')
-
-  const handleCreate = (e: FormEvent) => {
-    e.preventDefault()
-    const id = newId.trim()
-    const name = newName.trim()
-    if (!id || !name) return
-    createModel.mutate(
-      {
-        id,
-        name,
-        description: newDesc.trim(),
-        provider: newProvider,
-      },
-      {
-        onSuccess: () => {
-          setNewId('')
-          setNewName('')
-          setNewDesc('')
-        },
-      },
-    )
-  }
 
   const entries = lb.data?.entries ?? []
   const displayEntries = useMemo(
@@ -209,6 +167,25 @@ export function LeaderboardPage() {
           </div>
         </div>
 
+        {user && !isAdmin && (
+          <p className="text-xs text-muted-foreground">
+            模型配置在侧边栏「管理后台」→「模型」。请在{' '}
+            <code className="rounded bg-muted/80 px-1 py-0.5 font-mono text-[11px]">server/.env</code>{' '}
+            配置 <code className="rounded bg-muted/80 px-1 py-0.5 font-mono text-[11px]">ADMIN_GITHUB_IDS</code>{' '}
+            为你的 GitHub 数字 id；确保用{' '}
+            <code className="rounded bg-muted/80 px-1 py-0.5 font-mono text-[11px]">deno task dev</code>{' '}
+            启动 API 以加载 .env，然后
+            <button
+              type="button"
+              className="mx-0.5 underline decoration-muted-foreground/60 underline-offset-2 hover:text-foreground"
+              onClick={() => void queryClient.invalidateQueries({ queryKey: ['me'] })}
+            >
+              刷新会话
+            </button>
+            。
+          </p>
+        )}
+
         {lb.isLoading && <p className="text-sm text-muted-foreground">加载中…</p>}
         {lb.isError && <p className="text-sm text-destructive">{(lb.error as Error).message}</p>}
         {lb.isSuccess && entries.length === 0 && (
@@ -241,10 +218,7 @@ export function LeaderboardPage() {
               <tbody>
                 {displayEntries.map((row) => (
                   <tr key={row.modelId} className="border-b border-border/60 last:border-0">
-                    <td className="px-3 py-2">
-                      <div className="font-medium text-foreground">{row.modelName}</div>
-                      <div className="text-xs text-muted-foreground font-mono">{row.modelId}</div>
-                    </td>
+                    <td className="px-3 py-2 font-medium text-foreground">{row.modelName}</td>
                     <td className="px-3 py-2 tabular-nums">{pct(row.passRate)}</td>
                     <td className="px-3 py-2 tabular-nums">
                       {row.battleCount > 0 ? `${row.avgTimeMs} ms` : '—'}
@@ -258,133 +232,6 @@ export function LeaderboardPage() {
           </div>
         )}
       </div>
-
-      {isAdmin && (
-        <div className="space-y-4 border-t border-border/80 pt-8">
-          <h2 className="text-sm font-semibold text-foreground">模型管理</h2>
-          <form onSubmit={handleCreate} className="flex flex-wrap items-end gap-3">
-            <div className="space-y-1">
-              <label htmlFor="lb-new-id" className="text-xs text-muted-foreground">
-                ID
-              </label>
-              <input
-                id="lb-new-id"
-                className={`${inputClass} w-40 font-mono`}
-                value={newId}
-                onChange={(e: ChangeEvent<HTMLInputElement>) => setNewId(e.target.value)}
-                placeholder="e.g. deepseek-alt"
-                autoComplete="off"
-              />
-            </div>
-            <div className="space-y-1 min-w-[8rem] flex-1">
-              <label htmlFor="lb-new-name" className="text-xs text-muted-foreground">
-                名称
-              </label>
-              <input
-                id="lb-new-name"
-                className={inputClass}
-                value={newName}
-                onChange={(e: ChangeEvent<HTMLInputElement>) => setNewName(e.target.value)}
-                placeholder="展示名"
-              />
-            </div>
-            <div className="space-y-1 min-w-[12rem] flex-1">
-              <label htmlFor="lb-new-desc" className="text-xs text-muted-foreground">
-                描述
-              </label>
-              <input
-                id="lb-new-desc"
-                className={inputClass}
-                value={newDesc}
-                onChange={(e: ChangeEvent<HTMLInputElement>) => setNewDesc(e.target.value)}
-                placeholder="可选"
-              />
-            </div>
-            <div className="space-y-1">
-              <span className="text-xs text-muted-foreground">厂商</span>
-              <Select
-                value={newProvider}
-                onValueChange={(v) => setNewProvider(v as 'minimax' | 'deepseek')}
-              >
-                <SelectTrigger className="h-9 w-[9rem]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="deepseek">deepseek</SelectItem>
-                  <SelectItem value="minimax">minimax</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <Button type="submit" className="h-9" disabled={createModel.isPending}>
-              {createModel.isPending ? '提交中…' : '新建'}
-            </Button>
-          </form>
-          {createModel.isError && (
-            <p className="text-sm text-destructive">{(createModel.error as Error).message}</p>
-          )}
-
-          {adminModelsQ.isLoading && <p className="text-sm text-muted-foreground">加载模型列表…</p>}
-          {adminModelsQ.isError && (
-            <p className="text-sm text-destructive">{(adminModelsQ.error as Error).message}</p>
-          )}
-          {adminModelsQ.isSuccess && (
-            <div className="overflow-x-auto rounded-md border border-border/80">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border/80 bg-muted/30 text-left">
-                    <th className="px-3 py-2 font-medium">ID</th>
-                    <th className="px-3 py-2 font-medium">名称</th>
-                    <th className="px-3 py-2 font-medium">厂商</th>
-                    <th className="px-3 py-2 font-medium">状态</th>
-                    <th className="px-3 py-2 font-medium w-[8rem]">操作</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(adminModelsQ.data?.models ?? []).map((m) => (
-                    <tr key={m.id} className="border-b border-border/60 last:border-0">
-                      <td className="px-3 py-2 font-mono text-xs">{m.id}</td>
-                      <td className="px-3 py-2">{m.name}</td>
-                      <td className="px-3 py-2">{m.provider}</td>
-                      <td className="px-3 py-2">
-                        {m.enabled ? (
-                          <span className="text-emerald-600 dark:text-emerald-400">启用</span>
-                        ) : (
-                          <span className="text-muted-foreground">已禁用</span>
-                        )}
-                      </td>
-                      <td className="px-3 py-2">
-                        {m.enabled ? (
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            className="h-8"
-                            disabled={deleteModel.isPending}
-                            onClick={() => deleteModel.mutate(m.id)}
-                          >
-                            禁用
-                          </Button>
-                        ) : (
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            className="h-8"
-                            disabled={patchModel.isPending}
-                            onClick={() => patchModel.mutate({ id: m.id, patch: { enabled: true } })}
-                          >
-                            启用
-                          </Button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      )}
     </div>
   )
 }
