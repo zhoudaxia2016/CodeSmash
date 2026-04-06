@@ -179,7 +179,6 @@ export function Battle({
           void queryClient.invalidateQueries({ queryKey: ['battles', id] })
           setBattleId(id)
           setReadonlyDetailId(null)
-          onClearOpenBattleDetail()
           setOpeningDetailId(null)
           return
         } catch {
@@ -188,7 +187,6 @@ export function Battle({
       }
       if (!cancelled) {
         setReadonlyDetailId(id)
-        onClearOpenBattleDetail()
       }
       setOpeningDetailId(null)
     })()
@@ -196,7 +194,7 @@ export function Battle({
     return () => {
       cancelled = true
     }
-  }, [openBattleDetailId, currentUser?.id, onClearOpenBattleDetail, queryClient])
+  }, [openBattleDetailId, currentUser?.id, queryClient])
 
   useEffect(() => {
     if (models.length > 0) {
@@ -211,6 +209,8 @@ export function Battle({
 
   const handleStartBattle = () => {
     if (!canStart) return
+    setReadonlyDetailId(null)
+    onClearOpenBattleDetail()
     cloudBackedBattleRef.current = false
     if (battleId) {
       queryClient.removeQueries({ queryKey: ['battles', battleId] })
@@ -331,7 +331,10 @@ export function Battle({
     ) : readonlyDetailId != null ? (
       <BattleReadonlyDetail
         battleId={readonlyDetailId}
-        onClose={() => setReadonlyDetailId(null)}
+        onClose={() => {
+          setReadonlyDetailId(null)
+          onClearOpenBattleDetail()
+        }}
         models={models}
         currentUser={currentUser}
       />

@@ -13,9 +13,96 @@ import { Admin } from '@/pages/admin'
 type MainView = 'battle' | 'battleHistory' | 'problems' | 'leaderboard' | 'admin'
 type AdminTab = 'models' | 'logs'
 
+type ShellState = {
+  view: MainView
+  adminTab: AdminTab
+  openBattleDetailId: string | null
+}
+
 function readBattleDetailIdFromUrl(): string | null {
   const q = new URLSearchParams(window.location.search)
   return q.get('battle') ?? q.get('replay')
+}
+
+function appPathFromLocation(): string {
+  const rawBase = import.meta.env.BASE_URL
+  const base = rawBase === '/' ? '' : rawBase.replace(/\/$/, '')
+  let pathname = window.location.pathname
+  if (base && (pathname === base || pathname.startsWith(`${base}/`))) {
+    pathname = pathname === base ? '/' : pathname.slice(base.length) || '/'
+  }
+  if (!pathname.startsWith('/')) pathname = `/${pathname}`
+  const normalized = pathname.replace(/\/$/, '') || '/'
+  return normalized
+}
+
+function toFullPathname(appPath: string): string {
+  const rawBase = import.meta.env.BASE_URL
+  const base = rawBase === '/' ? '' : rawBase.replace(/\/$/, '')
+  const p = appPath === '/' ? '/' : appPath.startsWith('/') ? appPath : `/${appPath}`
+  if (!base) return p
+  return p === '/' ? `${base}/` : `${base}${p}`
+}
+
+function parseAppPath(appPath: string): { view: MainView; adminTab: AdminTab } {
+  const s = appPath.replace(/\/$/, '') || '/'
+  if (s === '/' || s === '/battle') return { view: 'battle', adminTab: 'models' }
+  if (s === '/history') return { view: 'battleHistory', adminTab: 'models' }
+  if (s === '/problems') return { view: 'problems', adminTab: 'models' }
+  if (s === '/leaderboard') return { view: 'leaderboard', adminTab: 'models' }
+  if (s === '/admin/logs') return { view: 'admin', adminTab: 'logs' }
+  if (s === '/admin') return { view: 'admin', adminTab: 'models' }
+  return { view: 'battle', adminTab: 'models' }
+}
+
+function appPathForView(view: MainView, adminTab: AdminTab): string {
+  switch (view) {
+    case 'battle':
+      return '/battle'
+    case 'battleHistory':
+      return '/history'
+    case 'problems':
+      return '/problems'
+    case 'leaderboard':
+      return '/leaderboard'
+    case 'admin':
+      return adminTab === 'logs' ? '/admin/logs' : '/admin'
+  }
+}
+
+function readShellStateFromUrl(): ShellState {
+  const { view, adminTab } = parseAppPath(appPathFromLocation())
+  return {
+    view,
+    adminTab,
+    openBattleDetailId: readBattleDetailIdFromUrl(),
+  }
+}
+
+function buildHistoryHref(
+  view: MainView,
+  adminTab: AdminTab,
+  battleId: string | null,
+  mode: 'push' | 'replace',
+): void {
+  const path = toFullPathname(appPathForView(view, adminTab))
+  const sp = new URLSearchParams(window.location.search)
+  sp.delete('replay')
+  if (view === 'battle' && battleId) sp.set('battle', battleId)
+  else sp.delete('battle')
+  const qs = sp.toString()
+  const href = qs ? `${path}?${qs}` : path
+  if (mode === 'push') window.history.pushState(null, '', href)
+  else window.history.replaceState(null, '', href)
+}
+
+function mergeShell(prev: ShellState, patch: Partial<ShellState>): ShellState {
+  const view = patch.view ?? prev.view
+  const adminTab = patch.adminTab ?? prev.adminTab
+  let openBattleDetailId = prev.openBattleDetailId
+  if (patch.openBattleDetailId !== undefined) openBattleDetailId = patch.openBattleDetailId
+  else if (patch.view !== undefined && patch.view !== 'battle') openBattleDetailId = null
+  return { view, adminTab, openBattleDetailId }
 }
 
 function githubLoginHref(): string {
@@ -33,43 +120,41 @@ function App() {
   const user = meData?.user ?? null
   const { data: models = [] } = useModels()
   const { data: problems = [] } = useProblems()
-  const [view, setView] = useState<MainView>('battle')
-  const [adminTab, setAdminTab] = useState<AdminTab>('models')
+  const [shell, setShell] = useState<ShellState>(() => readShellStateFromUrl())
+  const { view, adminTab, openBattleDetailId } = shell
   const [authBanner, setAuthBanner] = useState<string | null>(null)
-  const [openBattleDetailId, setOpenBattleDetailId] = useState<string | null>(() =>
-    readBattleDetailIdFromUrl(),
-  )
 
-  const setBattleDetailUrl = useCallback((id: string | null) => {
-    const url = new URL(window.location.href)
-    url.searchParams.delete('replay')
-    if (id) url.searchParams.set('battle', id)
-    else url.searchParams.delete('battle')
-    const q = url.searchParams.toString()
-    window.history.pushState(null, '', q ? `${url.pathname}?${q}` : url.pathname)
-    setOpenBattleDetailId(id)
+  const navigate = useCallback((patch: Partial<ShellState> & { replace?: boolean }) => {
+    const { replace, ...rest } = patch
+    setShell((prev) => {
+      const next = mergeShell(prev, rest)
+      buildHistoryHref(next.view, next.adminTab, next.openBattleDetailId, replace ? 'replace' : 'push')
+      return next
+    })
   }, [])
 
   const openBattleDetail = useCallback(
     (battleId: string) => {
-      setView('battle')
-      setBattleDetailUrl(battleId)
+      navigate({ view: 'battle', openBattleDetailId: battleId })
     },
-    [setBattleDetailUrl],
+    [navigate],
   )
 
   useEffect(() => {
-    const onPop = () => setOpenBattleDetailId(readBattleDetailIdFromUrl())
+    const onPop = () => setShell(readShellStateFromUrl())
     window.addEventListener('popstate', onPop)
     return () => window.removeEventListener('popstate', onPop)
   }, [])
 
   useEffect(() => {
     const err = new URLSearchParams(window.location.search).get('auth_error')
-    if (err) {
-      setAuthBanner('登录失败，请检查 GitHub OAuth 配置后重试。')
-      window.history.replaceState({}, '', window.location.pathname)
-    }
+    if (!err) return
+    setAuthBanner('登录失败，请检查 GitHub OAuth 配置后重试。')
+    const url = new URL(window.location.href)
+    url.searchParams.delete('auth_error')
+    const qs = url.searchParams.toString()
+    window.history.replaceState(null, '', qs ? `${url.pathname}?${qs}` : url.pathname)
+    setShell(readShellStateFromUrl())
   }, [])
 
   const handleLogout = async () => {
@@ -79,7 +164,7 @@ function App() {
       queryClient.setQueryData(['me'], { user: null })
       void queryClient.removeQueries({ queryKey: ['battle-results'] })
       void queryClient.invalidateQueries({ queryKey: ['me'] })
-      setBattleDetailUrl(null)
+      navigate({ openBattleDetailId: null, replace: true })
     }
   }
 
@@ -102,10 +187,7 @@ function App() {
         <nav className="flex flex-1 flex-col gap-0.5 min-h-0" aria-label="Main">
           <button
             type="button"
-            onClick={() => {
-              setView('battle')
-              setBattleDetailUrl(null)
-            }}
+            onClick={() => navigate({ view: 'battle', openBattleDetailId: null })}
             className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors text-left ${
               view === 'battle'
                 ? 'bg-arena-sidebar-active text-arena-sidebar-active-fg shadow-arena'
@@ -121,7 +203,7 @@ function App() {
           </button>
           <button
             type="button"
-            onClick={() => setView('battleHistory')}
+            onClick={() => navigate({ view: 'battleHistory' })}
             className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors text-left ${
               view === 'battleHistory'
                 ? 'bg-arena-sidebar-active text-arena-sidebar-active-fg shadow-arena'
@@ -137,7 +219,7 @@ function App() {
           </button>
           <button
             type="button"
-            onClick={() => setView('problems')}
+            onClick={() => navigate({ view: 'problems' })}
             className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors text-left ${
               view === 'problems'
                 ? 'bg-arena-sidebar-active text-arena-sidebar-active-fg shadow-arena'
@@ -153,7 +235,7 @@ function App() {
           </button>
           <button
             type="button"
-            onClick={() => setView('leaderboard')}
+            onClick={() => navigate({ view: 'leaderboard' })}
             className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors text-left ${
               view === 'leaderboard'
                 ? 'bg-arena-sidebar-active text-arena-sidebar-active-fg shadow-arena'
@@ -170,7 +252,7 @@ function App() {
           {user?.role === 'admin' && (
             <button
               type="button"
-              onClick={() => setView('admin')}
+              onClick={() => navigate({ view: 'admin' })}
               className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors text-left ${
                 view === 'admin'
                   ? 'bg-arena-sidebar-active text-arena-sidebar-active-fg shadow-arena'
@@ -279,14 +361,14 @@ function App() {
                 models={models}
                 problems={problems}
                 openBattleDetailId={openBattleDetailId}
-                onClearOpenBattleDetail={() => setBattleDetailUrl(null)}
+                onClearOpenBattleDetail={() => navigate({ openBattleDetailId: null, replace: true })}
               />
             )}
             {view === 'battleHistory' && <BattleHistory />}
             {view === 'problems' && <ProblemsPage />}
             {view === 'leaderboard' && <LeaderboardPage />}
             {view === 'admin' && user?.role === 'admin' && (
-              <Admin tab={adminTab} onTabChange={setAdminTab} />
+              <Admin tab={adminTab} onTabChange={(t) => navigate({ adminTab: t })} />
             )}
             {view === 'admin' && user?.role !== 'admin' && (
               <p className="text-sm text-muted-foreground">需要管理员权限。</p>
