@@ -4,8 +4,8 @@
     "@libsql/client": "npm:@libsql/client@0.15.15"
   },
   "tasks": {
-    "dev": "deno run --allow-net --allow-env --allow-read --allow-write --allow-ffi --watch --env-file=.env src/main.ts",
-    "start": "deno run --allow-net --allow-env --allow-read --allow-write --allow-ffi --env-file=.env src/main.ts",
+    "dev": "deno run --allow-net --allow-env --allow-read --allow-write --allow-ffi --watch --env-file=.env.local --env-file=.env src/main.ts",
+    "start": "deno run --allow-net --allow-env --allow-read --allow-write --allow-ffi --env-file=.env.local --env-file=.env src/main.ts",
     "test": "deno test"
   }
 }

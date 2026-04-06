@@ -18,7 +18,7 @@ const adminIdCount = parseAdminGithubIds().size
 if (adminIdCount > 0) {
   console.log(`[config] ADMIN_GITHUB_IDS: ${adminIdCount} id(s) loaded`)
 } else {
-  console.log('[config] ADMIN_GITHUB_IDS: (empty — no env or not loaded; use deno task dev / --env-file=.env)')
+  console.log('[config] ADMIN_GITHUB_IDS: (empty — no env or not loaded; use deno task dev / --env-file=.env.local --env-file=.env)')
 }
 
 const app = new Hono()
