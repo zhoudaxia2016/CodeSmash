@@ -199,7 +199,7 @@ function App() {
                 view === 'battle' ? 'bg-arena-accent shadow-[0_0_6px_hsl(var(--arena-accent)/0.35)]' : 'bg-muted-foreground/40'
               }`}
             />
-            Battle
+            对战
           </button>
           <button
             type="button"
@@ -231,7 +231,7 @@ function App() {
                 view === 'problems' ? 'bg-emerald-400/90' : 'bg-muted-foreground/40'
               }`}
             />
-            Problems
+            题库
           </button>
           <button
             type="button"
@@ -247,7 +247,7 @@ function App() {
                 view === 'leaderboard' ? 'bg-violet-400/90' : 'bg-muted-foreground/40'
               }`}
             />
-            Leaderboard
+            排行榜
           </button>
           {user?.role === 'admin' && (
             <button
@@ -330,7 +330,7 @@ function App() {
             )}
             {view === 'battle' ? (
               <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between lg:gap-6">
-                <h1 className="shrink-0 text-xl font-semibold tracking-tight text-foreground">Battle</h1>
+                <h1 className="shrink-0 text-xl font-semibold tracking-tight text-foreground">对战</h1>
                 <div
                   id="battle-header-slot"
                   className="flex min-w-0 flex-1 flex-wrap items-center gap-2 lg:justify-end"
@@ -338,7 +338,7 @@ function App() {
               </div>
             ) : view === 'problems' ? (
               <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between lg:gap-6">
-                <h1 className="shrink-0 text-xl font-semibold tracking-tight text-foreground">题目库</h1>
+                <h1 className="shrink-0 text-xl font-semibold tracking-tight text-foreground">题库</h1>
                 <div
                   id="problems-header-slot"
                   className="flex min-w-0 flex-1 flex-wrap items-center gap-2 lg:justify-end"
@@ -349,7 +349,7 @@ function App() {
             ) : view === 'admin' ? (
               <h1 className="text-xl font-semibold tracking-tight text-foreground">后台</h1>
             ) : (
-              <h1 className="text-xl font-semibold tracking-tight text-foreground">Leaderboard</h1>
+              <h1 className="text-xl font-semibold tracking-tight text-foreground">排行榜</h1>
             )}
           </div>
         </header>

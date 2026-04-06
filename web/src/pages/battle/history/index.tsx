@@ -297,7 +297,7 @@ export function BattleHistory() {
   return (
     <div className="space-y-6">
       <p className="text-sm text-muted-foreground">
-        从列表打开对战会进入 Battle 页查看详情；已登录且保存在你账户下的云端对战可继续追问。同步到云端后会移除本地副本。
+        从列表打开对战会进入对战页查看详情；已登录且保存在你账户下的云端对战可继续追问。同步到云端后会移除本地副本。
       </p>
 
       <div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">

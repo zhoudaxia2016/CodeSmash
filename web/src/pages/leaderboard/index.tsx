@@ -4,10 +4,10 @@ export function LeaderboardPage() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Leaderboard</CardTitle>
+        <CardTitle>排行榜</CardTitle>
       </CardHeader>
       <CardContent>
-        <p className="text-muted-foreground">Coming soon...</p>
+        <p className="text-muted-foreground">敬请期待。</p>
       </CardContent>
     </Card>
   )
