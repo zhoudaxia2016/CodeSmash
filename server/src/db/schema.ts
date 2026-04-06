@@ -223,6 +223,15 @@ export async function initDb(): Promise<void> {
         args: [],
       },
       {
+        sql: `CREATE TABLE IF NOT EXISTS battle_daily_quota (
+  subject TEXT NOT NULL,
+  day TEXT NOT NULL,
+  count INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (subject, day)
+)`,
+        args: [],
+      },
+      {
         sql: `CREATE TABLE IF NOT EXISTS llm_call_logs (
   id TEXT PRIMARY KEY,
   created_at TEXT NOT NULL,

@@ -15,11 +15,21 @@ import {
   splitThinkingFromModelCode,
   THINKING_OPEN_TAG_RE,
 } from '../lib/codePhaseSplit.ts'
+import {
+  BATTLE_DAILY_QUOTA_ANON,
+  BATTLE_DAILY_QUOTA_USER,
+  battleQuotaUtcDay,
+  tryConsumeBattleDailyQuota,
+} from '../db/battleDailyQuotaRepo.ts'
 import { getLibsqlClient } from '../db/client.ts'
 import { getBattleResultPayloadRowForUser } from '../db/battleResultsRepo.ts'
 import { getBattleLlmConfig, type BattleLlmProvider } from '../db/modelsRepo.ts'
 import type { SessionUser } from '../db/userSessionsRepo.ts'
-import { getSessionUser, requireAuth } from '../middleware/requireAuth.ts'
+import {
+  findSessionUserFromRequest,
+  getSessionUser,
+  requireAuth,
+} from '../middleware/requireAuth.ts'
 import { loadProblemForBattle } from './problems.ts'
 
 const battlesRouter = new Hono<{ Variables: { user?: SessionUser } }>()
@@ -82,6 +92,15 @@ type Battle = {
 }
 
 const activeBattles = new Map<string, Battle>()
+
+function clientIpForQuota(c: { req: { header: (name: string) => string | undefined } }): string {
+  const xff = c.req.header('x-forwarded-for')
+  if (xff) {
+    const first = xff.split(',')[0]?.trim()
+    if (first) return first
+  }
+  return c.req.header('cf-connecting-ip')?.trim() || 'unknown'
+}
 
 /** 从内存中移除对战（例如用户已删除云端存档后，避免仍命中旧会话）。 */
 export function evictActiveBattle(battleId: string): void {
@@ -612,6 +631,26 @@ battlesRouter.post('/', async (c) => {
   const cfgB = await getBattleLlmConfig(dbClient, modelBId)
   if (!cfgA || !cfgB) {
     return c.json({ error: 'Invalid or disabled model' }, 400)
+  }
+
+  const user = await findSessionUserFromRequest(c)
+  if (user?.role !== 'admin') {
+    const limit = user ? BATTLE_DAILY_QUOTA_USER : BATTLE_DAILY_QUOTA_ANON
+    const subject = user ? `user:${user.id}` : `anon:${clientIpForQuota(c)}`
+    const ok = await tryConsumeBattleDailyQuota(dbClient, subject, battleQuotaUtcDay(), limit)
+    if (!ok) {
+      return c.json(
+        {
+          error: '今日新对战次数已达上限',
+          message: user
+            ? `登录用户每日可开启 ${BATTLE_DAILY_QUOTA_USER} 场新对战，请明日再来`
+            : `未登录用户每日可开启 ${BATTLE_DAILY_QUOTA_ANON} 场新对战，登录后可提高至 ${BATTLE_DAILY_QUOTA_USER} 场`,
+          code: 'BATTLE_DAILY_QUOTA_EXCEEDED',
+          limit,
+        },
+        429,
+      )
+    }
   }
 
   const battleId = crypto.randomUUID()

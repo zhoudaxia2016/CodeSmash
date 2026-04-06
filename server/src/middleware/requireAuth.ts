@@ -5,6 +5,14 @@ import { findUserBySessionId, type SessionUser } from '../db/userSessionsRepo.ts
 
 export const SESSION_COOKIE = 'cm_session'
 
+/** Valid session cookie → user; missing or expired → null (no 401). */
+export async function findSessionUserFromRequest(c: Context): Promise<SessionUser | null> {
+  const sid = getCookie(c, SESSION_COOKIE)
+  if (!sid) return null
+  const client = getLibsqlClient()
+  return await findUserBySessionId(client, sid)
+}
+
 export async function requireAuth(c: Context, next: Next) {
   const sid = getCookie(c, SESSION_COOKIE)
   if (!sid) {

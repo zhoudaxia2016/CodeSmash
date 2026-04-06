@@ -51,6 +51,7 @@ export function Battle({
   const uploadedTerminalRef = useRef<string | null>(null)
   /** 从云端恢复进内存的对战：只更新云端，不写本地历史（避免「本地+云端」重复）。 */
   const cloudBackedBattleRef = useRef(false)
+  const [startBattleErr, setStartBattleErr] = useState<string | null>(null)
 
   const { mutate: startBattle, isPending: battleStarting } = useStartBattle()
   const { data: battle, isLoading: battleLoading, isError: battleError } = useBattle(battleId || '')
@@ -257,6 +258,7 @@ export function Battle({
 
   const handleStartBattle = () => {
     if (!canStart) return
+    setStartBattleErr(null)
     setReadonlyDetailId(null)
     onClearOpenBattleDetail()
     cloudBackedBattleRef.current = false
@@ -270,11 +272,15 @@ export function Battle({
         onSuccess: (battleSession) => {
           setBattleId(battleSession.id)
         },
+        onError: (e) => {
+          setStartBattleErr(e instanceof Error ? e.message : '无法开始对战')
+        },
       },
     )
   }
 
   const headerControls = (
+    <div className="flex w-full min-w-0 flex-col gap-1">
     <div className="flex w-full min-w-0 flex-wrap items-center gap-2">
       <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
         <Select value={selectedProblem} onValueChange={setSelectedProblem}>
@@ -363,6 +369,12 @@ export function Battle({
       >
         {battleStarting ? '创建中…' : '开始对战'}
       </Button>
+    </div>
+      {startBattleErr ? (
+        <p className="text-sm text-destructive" role="alert">
+          {startBattleErr}
+        </p>
+      ) : null}
     </div>
   )
 
