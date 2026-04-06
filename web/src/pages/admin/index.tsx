@@ -15,6 +15,7 @@ import {
   useDeleteAdminModel,
   usePatchAdminModel,
 } from '@/hooks/useApi'
+import { AdminLogs } from '@/pages/admin/logs'
 
 type Tab = 'models' | 'logs'
 
@@ -31,12 +32,6 @@ export function Admin({ tab }: Props) {
     queryFn: () => api.getAdminModels(),
     enabled: tab === 'models',
   })
-  const logsQ = useQuery({
-    queryKey: ['admin', 'logs'],
-    queryFn: () => api.getAdminLogs(),
-    enabled: tab === 'logs',
-  })
-
   const createModel = useCreateAdminModel()
   const patchModel = usePatchAdminModel()
   const deleteModel = useDeleteAdminModel()
@@ -67,7 +62,6 @@ export function Admin({ tab }: Props) {
     <div className="min-w-0">
       {tab === 'models' && (
         <div className="space-y-4">
-          <h2 className="text-sm font-semibold text-foreground">模型</h2>
           <form onSubmit={handleCreate} className="flex flex-wrap items-end gap-3">
             <div className="min-w-[8rem] flex-1 space-y-1">
               <label htmlFor="adm-new-name" className="text-xs text-muted-foreground">
@@ -163,18 +157,7 @@ export function Admin({ tab }: Props) {
           )}
         </div>
       )}
-      {tab === 'logs' && (
-        <div className="space-y-2">
-          <h2 className="text-sm font-semibold text-foreground">日志</h2>
-          {logsQ.isLoading && <p className="text-sm text-muted-foreground">加载中…</p>}
-          {logsQ.isError && (
-            <p className="text-sm text-destructive">{(logsQ.error as Error).message}</p>
-          )}
-          {logsQ.isSuccess && (
-            <p className="text-sm text-muted-foreground">{logsQ.data.message}</p>
-          )}
-        </div>
-      )}
+      {tab === 'logs' && <AdminLogs />}
     </div>
   )
 }

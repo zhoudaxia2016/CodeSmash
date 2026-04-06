@@ -1,6 +1,15 @@
 import { Hono } from 'hono'
 import { getLibsqlClient } from '../db/client.ts'
 import {
+  countLlmCallLogs,
+  deriveAdminLastMessageCell,
+  deriveAdminOutputContentCell,
+  getLlmCallLogById,
+  listLlmCallLogsForAdmin,
+  LLM_CALL_LOG_ADMIN_CELL_MAX,
+  LLM_CALL_SOURCE_VALUES,
+} from '../db/llmCallLog.ts'
+import {
   BATTLE_LLM_PROVIDERS,
   deleteModelPermanently,
   getModelById,
@@ -128,10 +137,90 @@ adminRouter.delete('/models/:id', async (c) => {
   return c.json({ ok: true })
 })
 
-adminRouter.get('/logs', (c) => {
+function parseAdminLogsQuery(c: { req: { query: (k: string) => string | undefined } }) {
+  const type = (c.req.query('type') ?? 'llm_call').trim()
+  const limitRaw = c.req.query('limit')
+  const offsetRaw = c.req.query('offset')
+  const limit = limitRaw != null && limitRaw !== '' ? Number(limitRaw) : 50
+  const offset = offsetRaw != null && offsetRaw !== '' ? Number(offsetRaw) : 0
+  return {
+    type,
+    filters: {
+      createdFrom: c.req.query('from')?.trim() || undefined,
+      createdTo: c.req.query('to')?.trim() || undefined,
+      source: c.req.query('source')?.trim() || undefined,
+      sourceIdContains: c.req.query('source_id')?.trim() || undefined,
+      provider: c.req.query('provider')?.trim() || undefined,
+      modelContains: c.req.query('model')?.trim() || undefined,
+      messagesContains: c.req.query('q_messages')?.trim() || undefined,
+      outputContains: c.req.query('q_output')?.trim() || undefined,
+      limit: Number.isFinite(limit) ? limit : 50,
+      offset: Number.isFinite(offset) ? offset : 0,
+    },
+  }
+}
+
+adminRouter.get('/logs/llm-call/:id', async (c) => {
+  const id = c.req.param('id')
+  if (!id) return c.json({ error: 'id required' }, 400)
+  const client = getLibsqlClient()
+  const row = await getLlmCallLogById(client, id)
+  if (!row) return c.json({ error: 'Not found' }, 404)
   return c.json({
-    message: '日志管理（占位）',
-    items: [] as unknown[],
+    type: 'llm_call',
+    item: {
+      id: row.id,
+      createdAt: row.created_at,
+      completedAt: row.completed_at,
+      source: row.source,
+      sourceId: row.source_id,
+      provider: row.provider,
+      model: row.model,
+      messages: row.messages,
+      outputJson: row.output_json,
+      error: row.error,
+      durationMs: row.duration_ms,
+    },
+  })
+})
+
+adminRouter.get('/logs', async (c) => {
+  const { type, filters } = parseAdminLogsQuery(c)
+  if (type !== 'llm_call') {
+    return c.json({
+      type,
+      supportedTypes: ['llm_call'],
+      total: 0,
+      items: [],
+      meta: { llmSources: [...LLM_CALL_SOURCE_VALUES], llmProviders: [...BATTLE_LLM_PROVIDERS] },
+    })
+  }
+
+  const client = getLibsqlClient()
+  const [total, rows] = await Promise.all([
+    countLlmCallLogs(client, filters),
+    listLlmCallLogsForAdmin(client, filters),
+  ])
+
+  return c.json({
+    type: 'llm_call',
+    supportedTypes: ['llm_call'],
+    total,
+    meta: { llmSources: [...LLM_CALL_SOURCE_VALUES], llmProviders: [...BATTLE_LLM_PROVIDERS] },
+    items: rows.map((r) => ({
+      id: r.id,
+      createdAt: r.created_at,
+      completedAt: r.completed_at,
+      source: r.source,
+      sourceId: r.source_id,
+      provider: r.provider,
+      model: r.model,
+      lastMessageCell: deriveAdminLastMessageCell(r.messages, LLM_CALL_LOG_ADMIN_CELL_MAX),
+      outputContentCell: deriveAdminOutputContentCell(r.output_json, LLM_CALL_LOG_ADMIN_CELL_MAX),
+      hasOutputJson: r.output_json != null && String(r.output_json).trim() !== '',
+      error: r.error,
+      durationMs: r.duration_ms,
+    })),
   })
 })
 

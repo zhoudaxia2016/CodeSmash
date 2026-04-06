@@ -1,4 +1,11 @@
-import type { AdminPlatformModel, AuthUser, RateLimitInfo } from '../types'
+import type {
+  AdminLlmCallLogDetail,
+  AdminLlmCallLogsQuery,
+  AdminLlmCallLogsResponse,
+  AdminPlatformModel,
+  AuthUser,
+  RateLimitInfo,
+} from '../types'
 
 const rawApiOrigin =
   import.meta.env.VITE_API_URL?.trim().replace(/\/$/, '') ?? ''
@@ -114,8 +121,26 @@ export const api = {
     return handleResponse(res)
   },
 
-  async getAdminLogs(): Promise<{ message: string; items: unknown[] }> {
-    const res = await apiFetch(`${API_BASE}/admin/logs`)
+  async getAdminLogs(params?: AdminLlmCallLogsQuery): Promise<AdminLlmCallLogsResponse> {
+    const q = new URLSearchParams()
+    q.set('type', params?.type ?? 'llm_call')
+    if (params?.from?.trim()) q.set('from', params.from.trim())
+    if (params?.to?.trim()) q.set('to', params.to.trim())
+    if (params?.source?.trim()) q.set('source', params.source.trim())
+    if (params?.source_id?.trim()) q.set('source_id', params.source_id.trim())
+    if (params?.provider?.trim()) q.set('provider', params.provider.trim())
+    if (params?.model?.trim()) q.set('model', params.model.trim())
+    if (params?.q_messages?.trim()) q.set('q_messages', params.q_messages.trim())
+    if (params?.q_output?.trim()) q.set('q_output', params.q_output.trim())
+    if (params?.limit != null) q.set('limit', String(params.limit))
+    if (params?.offset != null) q.set('offset', String(params.offset))
+    const qs = q.toString()
+    const res = await apiFetch(`${API_BASE}/admin/logs?${qs}`)
+    return handleResponse(res)
+  },
+
+  async getAdminLlmCallLog(id: string): Promise<{ type: 'llm_call'; item: AdminLlmCallLogDetail }> {
+    const res = await apiFetch(`${API_BASE}/admin/logs/llm-call/${encodeURIComponent(id)}`)
     return handleResponse(res)
   },
 

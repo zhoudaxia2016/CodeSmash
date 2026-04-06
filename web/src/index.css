@@ -207,3 +207,12 @@
 .markdown-viewer.thinking-md :where(h2, h3) {
   @apply text-foreground;
 }
+
+/* react-day-picker：与主题色对齐 */
+.rdp-root {
+  --rdp-accent-color: hsl(var(--primary));
+  --rdp-accent-background-color: hsl(var(--accent));
+  --rdp-day_button-border-radius: calc(var(--radius) - 2px);
+  --rdp-selected-border: hsl(var(--primary));
+  color: hsl(var(--foreground));
+}

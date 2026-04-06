@@ -13,6 +13,60 @@ export type AdminPlatformModel = {
   createdAt: string
 }
 
+export type AdminLlmCallLogsQuery = {
+  type?: 'llm_call'
+  from?: string
+  to?: string
+  source?: string
+  source_id?: string
+  provider?: string
+  model?: string
+  q_messages?: string
+  q_output?: string
+  limit?: number
+  offset?: number
+}
+
+export type AdminLlmCallLogListItem = {
+  id: string
+  createdAt: string
+  completedAt: string
+  source: string
+  sourceId: string | null
+  provider: string
+  model: string
+  /** 最后一条消息的 content（列表展示用，已截断）。 */
+  lastMessageCell: string
+  /** output_json.content（列表展示用，已截断）；无 content 时为 null。 */
+  outputContentCell: string | null
+  /** 是否存在 output_json（便于无 content 时仍可点开详情）。 */
+  hasOutputJson: boolean
+  error: string | null
+  durationMs: number
+}
+
+export type AdminLlmCallLogsResponse = {
+  type: string
+  supportedTypes: string[]
+  total: number
+  meta: { llmSources: string[]; llmProviders: string[] }
+  items: AdminLlmCallLogListItem[]
+}
+
+export type AdminLlmCallLogDetail = {
+  id: string
+  createdAt: string
+  completedAt: string
+  source: string
+  sourceId: string | null
+  provider: string
+  model: string
+  messages: string
+  outputJson: string | null
+  error: string | null
+  durationMs: number
+}
+
 export type GradingMode = 'expected' | 'verify'
 
 export interface Problem {

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
+import { BookOpen, Box, History, ScrollText, Swords, Trophy } from 'lucide-react'
 import { api } from '@/api/client'
 import { LoginAutoSyncBattles } from '@/components/login-auto-sync-battles'
 import { BattleDetailNavProvider } from '@/context/battle-replay-nav'
@@ -234,10 +235,10 @@ function App() {
                 : 'text-arena-sidebar-foreground hover:bg-arena-sidebar-active/60 hover:text-foreground'
             }`}
           >
-            <span
-              className={`w-2 h-2 rounded-full shrink-0 ${
-                view === 'battle' ? 'bg-arena-accent shadow-[0_0_6px_hsl(var(--arena-accent)/0.35)]' : 'bg-muted-foreground/40'
-              }`}
+            <Swords
+              className="h-[18px] w-[18px] shrink-0"
+              strokeWidth={2}
+              aria-hidden
             />
             对战
           </button>
@@ -250,10 +251,10 @@ function App() {
                 : 'text-arena-sidebar-foreground hover:bg-arena-sidebar-active/60 hover:text-foreground'
             }`}
           >
-            <span
-              className={`w-2 h-2 rounded-full shrink-0 ${
-                view === 'battleHistory' ? 'bg-sky-400/90' : 'bg-muted-foreground/40'
-              }`}
+            <History
+              className="h-[18px] w-[18px] shrink-0"
+              strokeWidth={2}
+              aria-hidden
             />
             对战历史
           </button>
@@ -266,10 +267,10 @@ function App() {
                 : 'text-arena-sidebar-foreground hover:bg-arena-sidebar-active/60 hover:text-foreground'
             }`}
           >
-            <span
-              className={`w-2 h-2 rounded-full shrink-0 ${
-                view === 'problems' ? 'bg-emerald-400/90' : 'bg-muted-foreground/40'
-              }`}
+            <BookOpen
+              className="h-[18px] w-[18px] shrink-0"
+              strokeWidth={2}
+              aria-hidden
             />
             题库
           </button>
@@ -282,10 +283,10 @@ function App() {
                 : 'text-arena-sidebar-foreground hover:bg-arena-sidebar-active/60 hover:text-foreground'
             }`}
           >
-            <span
-              className={`w-2 h-2 rounded-full shrink-0 ${
-                view === 'leaderboard' ? 'bg-violet-400/90' : 'bg-muted-foreground/40'
-              }`}
+            <Trophy
+              className="h-[18px] w-[18px] shrink-0"
+              strokeWidth={2}
+              aria-hidden
             />
             排行榜
           </button>
@@ -303,12 +304,10 @@ function App() {
                     : 'text-arena-sidebar-foreground hover:bg-arena-sidebar-active/60 hover:text-foreground'
                 }`}
               >
-                <span
-                  className={`h-2 w-2 shrink-0 rounded-full ${
-                    view === 'admin' && adminTab === 'models'
-                      ? 'bg-amber-400/90'
-                      : 'bg-muted-foreground/40'
-                  }`}
+                <Box
+                  className="h-[18px] w-[18px] shrink-0"
+                  strokeWidth={2}
+                  aria-hidden
                 />
                 模型
               </button>
@@ -321,12 +320,10 @@ function App() {
                     : 'text-arena-sidebar-foreground hover:bg-arena-sidebar-active/60 hover:text-foreground'
                 }`}
               >
-                <span
-                  className={`h-2 w-2 shrink-0 rounded-full ${
-                    view === 'admin' && adminTab === 'logs'
-                      ? 'bg-amber-400/90'
-                      : 'bg-muted-foreground/40'
-                  }`}
+                <ScrollText
+                  className="h-[18px] w-[18px] shrink-0"
+                  strokeWidth={2}
+                  aria-hidden
                 />
                 日志
               </button>
@@ -412,7 +409,9 @@ function App() {
             ) : view === 'battleHistory' ? (
               <h1 className="text-xl font-semibold tracking-tight text-foreground">对战历史</h1>
             ) : view === 'admin' ? (
-              <h1 className="text-xl font-semibold tracking-tight text-foreground">管理后台</h1>
+              <h1 className="text-xl font-semibold tracking-tight text-foreground">
+                {adminTab === 'logs' ? '日志' : '模型'}
+              </h1>
             ) : (
               <h1 className="text-xl font-semibold tracking-tight text-foreground">排行榜</h1>
             )}
