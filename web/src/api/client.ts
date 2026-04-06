@@ -51,6 +51,29 @@ export const api = {
     return handleResponse(res)
   },
 
+  async getBattleResults(params?: { limit?: number; offset?: number }): Promise<{
+    items: import('../types').BattleResultListItem[]
+  }> {
+    const q = new URLSearchParams()
+    if (params?.limit != null) q.set('limit', String(params.limit))
+    if (params?.offset != null) q.set('offset', String(params.offset))
+    const qs = q.toString()
+    const res = await apiFetch(`${API_BASE}/battle-results${qs ? `?${qs}` : ''}`)
+    return handleResponse(res)
+  },
+
+  async getBattleResult(id: string): Promise<{ battle: import('../types').BattleSession }> {
+    const res = await apiFetch(`${API_BASE}/battle-results/${encodeURIComponent(id)}`)
+    return handleResponse(res)
+  },
+
+  async deleteBattleResult(id: string): Promise<{ ok: boolean }> {
+    const res = await apiFetch(`${API_BASE}/battle-results/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    })
+    return handleResponse(res)
+  },
+
   async getAdminModels(): Promise<{ message: string; items: unknown[] }> {
     const res = await apiFetch(`${API_BASE}/admin/models`)
     return handleResponse(res)
@@ -169,6 +192,13 @@ export const api = {
 
   async getBattle(battleId: string): Promise<{ battle: import('../types').BattleSession }> {
     const res = await apiFetch(`${API_BASE}/battles/${battleId}`)
+    return handleResponse(res)
+  },
+
+  async resumeBattle(battleId: string): Promise<{ battle: import('../types').BattleSession }> {
+    const res = await apiFetch(`${API_BASE}/battles/resume/${encodeURIComponent(battleId)}`, {
+      method: 'POST',
+    })
     return handleResponse(res)
   },
 

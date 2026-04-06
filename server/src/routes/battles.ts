@@ -15,9 +15,13 @@ import {
   splitThinkingFromModelCode,
   THINKING_OPEN_TAG_RE,
 } from '../lib/codePhaseSplit.ts'
+import { getLibsqlClient } from '../db/client.ts'
+import { getBattleResultPayloadRowForUser } from '../db/battleResultsRepo.ts'
+import type { SessionUser } from '../db/userSessionsRepo.ts'
+import { getSessionUser, requireAuth } from '../middleware/requireAuth.ts'
 import { loadProblemForBattle } from './problems.ts'
 
-const battlesRouter = new Hono()
+const battlesRouter = new Hono<{ Variables: { user?: SessionUser } }>()
 
 export type BattlePhase =
   | 'pending'
@@ -77,6 +81,143 @@ type Battle = {
 }
 
 const activeBattles = new Map<string, Battle>()
+
+/** 从内存中移除对战（例如用户已删除云端存档后，避免仍命中旧会话）。 */
+export function evictActiveBattle(battleId: string): void {
+  activeBattles.delete(battleId)
+}
+
+function isRecord(x: unknown): x is Record<string, unknown> {
+  return typeof x === 'object' && x !== null
+}
+
+function normalizeStoredPhase(phase: string): BattlePhase {
+  if (phase === 'running_tests') return 'awaiting_execution'
+  if (
+    phase === 'pending' ||
+    phase === 'analyzing' ||
+    phase === 'coding' ||
+    phase === 'awaiting_execution' ||
+    phase === 'failed' ||
+    phase === 'completed'
+  ) {
+    return phase
+  }
+  return 'completed'
+}
+
+function normalizeStoredRoundStatus(
+  status: string,
+  phase: BattlePhase,
+): 'running' | 'completed' | 'failed' {
+  if (status === 'failed' || status === 'error' || status === 'timeout') return 'failed'
+  if (phase === 'failed') return 'failed'
+  if (phase === 'completed' && (status === 'completed' || status === 'running')) return 'completed'
+  if (status === 'completed' && phase === 'completed') return 'completed'
+  return 'running'
+}
+
+function mapOfficialDetail(d: Record<string, unknown>): OfficialDetail {
+  return {
+    testCaseId: String(d.testCaseId ?? ''),
+    input: String(d.input ?? ''),
+    expectedOutput: String(d.expectedOutput ?? ''),
+    actualOutput: String(d.actualOutput ?? ''),
+    passed: Boolean(d.passed),
+    timeMs: typeof d.timeMs === 'number' ? d.timeMs : undefined,
+  }
+}
+
+function mapStoredRoundToBattleRound(x: unknown): BattleRound | null {
+  if (!isRecord(x)) return null
+  const phase = normalizeStoredPhase(String(x.phase ?? 'completed'))
+  const status = normalizeStoredRoundStatus(String(x.status ?? 'completed'), phase)
+  const st = Array.isArray(x.selfTestCases) ? x.selfTestCases : []
+  const selfTestCases = st.map((item) => {
+    if (!isRecord(item)) return { input: '', expectedOutput: '' }
+    return {
+      input: String(item.input ?? ''),
+      expectedOutput: String(item.expectedOutput ?? ''),
+    }
+  })
+  let officialResult: BattleRound['officialResult']
+  if (isRecord(x.officialResult)) {
+    const o = x.officialResult
+    const detailsRaw = o.details
+    const details = Array.isArray(detailsRaw)
+      ? detailsRaw.map((d) => (isRecord(d) ? mapOfficialDetail(d) : null)).filter((d): d is OfficialDetail => d != null)
+      : undefined
+    officialResult = {
+      passed: Number(o.passed ?? 0),
+      total: Number(o.total ?? 0),
+      timeMs: Number(o.timeMs ?? 0),
+      details,
+    }
+  }
+  return {
+    refineUserMessage: typeof x.refineUserMessage === 'string' ? x.refineUserMessage : undefined,
+    thought: String(x.thought ?? ''),
+    codingThought: String(x.codingThought ?? ''),
+    code: String(x.code ?? ''),
+    selfTestCases,
+    selfTestConclusion: String(x.selfTestConclusion ?? ''),
+    officialResult,
+    timeMs: Number(x.timeMs ?? 0),
+    analysisTimeMs: typeof x.analysisTimeMs === 'number' ? x.analysisTimeMs : undefined,
+    codingTimeMs: typeof x.codingTimeMs === 'number' ? x.codingTimeMs : undefined,
+    phase,
+    status,
+    error: typeof x.error === 'string' ? x.error : undefined,
+  }
+}
+
+function mapStoredModelResult(x: unknown): BattleResult | null {
+  if (!isRecord(x)) return null
+  const modelId = x.modelId
+  const result = x.result
+  if (typeof modelId !== 'string' || !Array.isArray(result)) return null
+  const rounds: BattleRound[] = []
+  for (const r of result) {
+    const br = mapStoredRoundToBattleRound(r)
+    if (br) rounds.push(br)
+  }
+  if (rounds.length === 0) return null
+  return { modelId, result: rounds }
+}
+
+function mapStoredBattleStatus(s: string): Battle['status'] {
+  if (s === 'completed' || s === 'partial') return 'completed'
+  if (s === 'failed') return 'failed'
+  if (s === 'awaiting_client') return 'awaiting_client'
+  if (s === 'pending') return 'pending'
+  return 'running'
+}
+
+/** Rehydrate client battle_results JSON into in-memory Battle for refine / official. */
+function battleSessionPayloadToBattle(json: unknown): Battle | null {
+  if (!isRecord(json)) return null
+  const id = json.id
+  const problemId = json.problemId
+  if (typeof id !== 'string' || typeof problemId !== 'string') return null
+  const modelAId = json.modelAId
+  const modelBId = json.modelBId
+  if (typeof modelAId !== 'string' || typeof modelBId !== 'string') return null
+  const modelAResult = mapStoredModelResult(json.modelAResult)
+  const modelBResult = mapStoredModelResult(json.modelBResult)
+  if (!modelAResult || !modelBResult) return null
+  const status = mapStoredBattleStatus(String(json.status ?? 'completed'))
+  return {
+    id,
+    problemId,
+    modelAId,
+    modelBId,
+    status,
+    modelAResult,
+    modelBResult,
+    createdAt: typeof json.createdAt === 'string' ? json.createdAt : new Date().toISOString(),
+    completedAt: json.completedAt == null ? null : String(json.completedAt),
+  }
+}
 
 function getModelProvider(modelId: string): 'minimax' | 'deepseek' {
   if (modelId.startsWith('minimax')) return 'minimax'
@@ -401,6 +542,44 @@ async function runBattle(battleId: string, battle: Battle, problem: BattleProble
   tryFinishBattle(battle)
   activeBattles.set(battleId, battle)
 }
+
+battlesRouter.post('/resume/:id', requireAuth, async (c) => {
+  const user = getSessionUser(c)
+  const id = c.req.param('id')
+  if (!id) return c.json({ error: 'id required' }, 400)
+
+  const existing = activeBattles.get(id)
+  if (existing) {
+    return c.json({ battle: existing })
+  }
+
+  const client = getLibsqlClient()
+  let row: { payloadJson: string } | null
+  try {
+    row = await getBattleResultPayloadRowForUser(client, id, user.id)
+  } catch (e) {
+    console.error('[battles] resume load', e)
+    return c.json({ error: 'Failed to load stored battle' }, 500)
+  }
+  if (!row) {
+    return c.json({ error: 'Not found' }, 404)
+  }
+
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(row.payloadJson) as unknown
+  } catch {
+    return c.json({ error: 'Invalid stored battle' }, 500)
+  }
+
+  const battle = battleSessionPayloadToBattle(parsed)
+  if (!battle) {
+    return c.json({ error: 'Could not restore battle from snapshot' }, 400)
+  }
+
+  activeBattles.set(id, battle)
+  return c.json({ battle })
+})
 
 battlesRouter.post('/', async (c) => {
   const { problemId, modelAId, modelBId } = await c.req.json()

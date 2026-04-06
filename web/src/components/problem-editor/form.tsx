@@ -70,6 +70,8 @@ type Props = {
   onCancel?: () => void
   cancelLabel?: string
   submitLabel?: string
+  /** 只读浏览：禁用表单与命题辅助，底部仅保留关闭。 */
+  viewOnly?: boolean
 }
 
 function normalizeDataKey(dataStr: string): string | null {
@@ -125,6 +127,7 @@ export function ProblemEditorForm({
   onCancel,
   cancelLabel = '取消',
   submitLabel,
+  viewOnly = false,
 }: Props) {
   const lastResetKey = useRef('')
   const [title, setTitle] = useState('')
@@ -472,6 +475,10 @@ export function ProblemEditorForm({
               </p>
             )}
 
+            <fieldset
+              disabled={viewOnly}
+              className={cn('min-w-0 border-0 p-0', viewOnly && 'opacity-95')}
+            >
             <ProblemFormFields
               variant={formVariant}
               title={title}
@@ -589,10 +596,12 @@ export function ProblemEditorForm({
                   })()}
                 </ul>
               )}
-              <Button type="button" variant="outline" size="sm" className="gap-1" onClick={addRow}>
-                <Plus className="h-3.5 w-3.5" />
-                添加用例
-              </Button>
+              {!viewOnly && (
+                <Button type="button" variant="outline" size="sm" className="gap-1" onClick={addRow}>
+                  <Plus className="h-3.5 w-3.5" />
+                  添加用例
+                </Button>
+              )}
             </div>
 
             <div className="space-y-3">
@@ -604,6 +613,8 @@ export function ProblemEditorForm({
                 verifyMinHeightClass={mode === 'edit' ? 'min-h-[6rem]' : undefined}
               />
             </div>
+            </fieldset>
+            {!viewOnly && (
             <ProblemAuthoringAssistPanel
               models={models}
               authorModelId={authorModelId}
@@ -613,6 +624,7 @@ export function ProblemEditorForm({
               onSuggest={mode === 'create' ? handleSuggestCreate : handleSuggestEdit}
               pending={suggestPending}
             />
+            )}
           </>
         )}
       </div>
@@ -624,9 +636,11 @@ export function ProblemEditorForm({
               {cancelLabel}
             </Button>
           )}
-          <Button type="button" size="sm" disabled={pending} onClick={() => void handleSubmit()}>
-            {pending ? '保存中…' : submitLabel ?? defaultSubmit}
-          </Button>
+          {!viewOnly && (
+            <Button type="button" size="sm" disabled={pending} onClick={() => void handleSubmit()}>
+              {pending ? '保存中…' : submitLabel ?? defaultSubmit}
+            </Button>
+          )}
         </footer>
       )}
     </div>

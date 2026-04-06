@@ -1,10 +1,62 @@
 import { Hono } from 'hono'
 import { getLibsqlClient } from '../db/client.ts'
 import type { SessionUser } from '../db/userSessionsRepo.ts'
-import { upsertBattleResult } from '../db/battleResultsRepo.ts'
+import {
+  deleteBattleResultForUser,
+  getBattleResultPayloadRowForUser,
+  listBattleResultsForUser,
+  upsertBattleResult,
+} from '../db/battleResultsRepo.ts'
+import { evictActiveBattle } from './battles.ts'
 import { getSessionUser, requireAuth } from '../middleware/requireAuth.ts'
 
 const battleResultsRouter = new Hono<{ Variables: { user?: SessionUser } }>()
+
+const LIST_LIMIT_MAX = 200
+
+battleResultsRouter.get('/', requireAuth, async (c) => {
+  const user = getSessionUser(c)
+  const limitRaw = c.req.query('limit')
+  const offsetRaw = c.req.query('offset')
+  let limit = Number(limitRaw ?? 50)
+  let offset = Number(offsetRaw ?? 0)
+  if (!Number.isFinite(limit) || limit < 1) limit = 50
+  if (limit > LIST_LIMIT_MAX) limit = LIST_LIMIT_MAX
+  if (!Number.isFinite(offset) || offset < 0) offset = 0
+
+  const client = getLibsqlClient()
+  try {
+    const items = await listBattleResultsForUser(client, user.id, limit, offset)
+    return c.json({ items })
+  } catch (e) {
+    console.error('[battle-results] list', e)
+    return c.json({ error: 'Failed to list battle results' }, 500)
+  }
+})
+
+battleResultsRouter.get('/:id', requireAuth, async (c) => {
+  const user = getSessionUser(c)
+  const id = c.req.param('id')
+  if (!id) return c.json({ error: 'id required' }, 400)
+
+  const client = getLibsqlClient()
+  let row: { payloadJson: string } | null
+  try {
+    row = await getBattleResultPayloadRowForUser(client, id, user.id)
+  } catch (e) {
+    console.error('[battle-results] get', e)
+    return c.json({ error: 'Failed to load battle result' }, 500)
+  }
+  if (!row) return c.json({ error: 'Not found' }, 404)
+
+  let battle: unknown
+  try {
+    battle = JSON.parse(row.payloadJson) as unknown
+  } catch {
+    return c.json({ error: 'Corrupt battle payload' }, 500)
+  }
+  return c.json({ battle })
+})
 
 battleResultsRouter.post('/', requireAuth, async (c) => {
   const user = getSessionUser(c)
@@ -45,6 +97,23 @@ battleResultsRouter.post('/', requireAuth, async (c) => {
     return c.json({ error: 'Failed to save battle result' }, 500)
   }
   return c.json({ ok: true, id }, 201)
+})
+
+battleResultsRouter.delete('/:id', requireAuth, async (c) => {
+  const user = getSessionUser(c)
+  const id = c.req.param('id')
+  if (!id) return c.json({ error: 'id required' }, 400)
+
+  const client = getLibsqlClient()
+  try {
+    const ok = await deleteBattleResultForUser(client, id, user.id)
+    if (!ok) return c.json({ error: 'Not found' }, 404)
+    evictActiveBattle(id)
+    return c.json({ ok: true })
+  } catch (e) {
+    console.error('[battle-results] delete', e)
+    return c.json({ error: 'Failed to delete battle result' }, 500)
+  }
 })
 
 export { battleResultsRouter }

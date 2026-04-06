@@ -34,6 +34,7 @@ export function ProblemEditor({
       const el = e.target as HTMLElement
       if (el.closest?.('#battle-header-slot')) return
       if (el.closest?.('#problems-header-slot')) return
+      if (el.closest?.('#app-shell-header')) return
       if (el.closest?.('[data-radix-popper-content-wrapper]')) return
       if (el.closest?.('[role="listbox"]')) return
       onOpenChange(false)

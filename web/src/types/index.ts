@@ -66,6 +66,18 @@ export interface BattleSession {
   completedAt?: string
 }
 
+/** Row from GET /battle-results (list). */
+export interface BattleResultListItem {
+  id: string
+  problemId: string
+  modelAId: string
+  modelBId: string
+  createdAt: string
+  status: string | null
+  completedAt: string | null
+  creator: Pick<AuthUser, 'id' | 'login' | 'name' | 'avatarUrl'>
+}
+
 /** Single model-side battle round; server streams into `result[last]`. */
 export type ModelSideStatus =
   | 'pending'

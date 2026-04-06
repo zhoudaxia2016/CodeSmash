@@ -1,14 +1,17 @@
-import { useState, useEffect, useLayoutEffect, useMemo } from 'react'
+import { useState, useEffect, useLayoutEffect, useMemo, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { ChevronDown } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
+import { api } from '@/api/client'
 import { useMe, useProblem, useStartBattle, useBattle } from '@/hooks/useApi'
 import { usePersistProblemEditorUpdate } from '@/hooks/usePersistProblemEditorUpdate'
 import type { PlatformModel, Problem, ProblemGradingContext } from '@/types'
-import { saveBattleToLocalHistory } from '@/utils/battle-local-history'
+import { removeLocalBattleEntry, saveBattleToLocalHistory } from '@/utils/battle-local-history'
+import { loadBattleSyncPrefs } from '@/utils/battle-sync-prefs'
 import { defaultAuthoringModelId } from '@/lib/authoring-model'
 import { ProblemEditor, type ProblemEditorProps } from '@/components/problem-editor'
 import { Result } from './result'
+import { BattleReadonlyDetail } from './replay-panel'
 import { NewProblem } from './new-problem'
 import { Button } from '@/components/ui/button'
 import {
@@ -21,7 +24,17 @@ import {
 
 const HEADER_SLOT_ID = 'battle-header-slot'
 
-export function Battle({ models, problems }: { models: PlatformModel[]; problems: Problem[] }) {
+export function Battle({
+  models,
+  problems,
+  openBattleDetailId,
+  onClearOpenBattleDetail,
+}: {
+  models: PlatformModel[]
+  problems: Problem[]
+  openBattleDetailId: string | null
+  onClearOpenBattleDetail: () => void
+}) {
   const queryClient = useQueryClient()
   const { data: meData } = useMe()
   const currentUser = meData?.user ?? null
@@ -31,6 +44,13 @@ export function Battle({ models, problems }: { models: PlatformModel[]; problems
   const [modelB, setModelB] = useState('')
   const [battleId, setBattleId] = useState<string | null>(null)
   const [newProblemOpen, setNewProblemOpen] = useState(false)
+  const [readonlyDetailId, setReadonlyDetailId] = useState<string | null>(null)
+  const [openingDetailId, setOpeningDetailId] = useState<string | null>(null)
+  const [terminalPersist, setTerminalPersist] = useState<'local' | 'cloud' | 'cloud_error' | null>(null)
+  const uploadedTerminalRef = useRef<string | null>(null)
+  /** 从云端恢复进内存的对战：只更新云端，不写本地历史（避免「本地+云端」重复）。 */
+  const cloudBackedBattleRef = useRef(false)
+
   const { mutate: startBattle, isPending: battleStarting } = useStartBattle()
   const { data: battle, isLoading: battleLoading, isError: battleError } = useBattle(battleId || '')
   const problemForBattleQuery = useProblem(selectedProblem, {
@@ -86,10 +106,97 @@ export function Battle({ models, problems }: { models: PlatformModel[]; problems
   }, [selectedProblem])
 
   useEffect(() => {
-    if (!battle) return
+    uploadedTerminalRef.current = null
+    setTerminalPersist(null)
+  }, [battleId])
+
+  useEffect(() => {
+    if (!battle || !battleId || battle.id !== battleId) return
+    if (battle.status !== 'completed' && battle.status !== 'failed') {
+      uploadedTerminalRef.current = null
+    }
+  }, [battle?.status, battle?.id, battleId])
+
+  useEffect(() => {
+    if (!battle || !battleId || battle.id !== battleId) return
     if (battle.status !== 'completed' && battle.status !== 'failed') return
-    saveBattleToLocalHistory(battle)
-  }, [battle])
+    if (uploadedTerminalRef.current === battle.id) return
+
+    const bid = battle.id
+    let cancelled = false
+    const auto = loadBattleSyncPrefs().autoSyncWhenLoggedIn
+    const isCloudBacked = cloudBackedBattleRef.current
+    const shouldPostCloud = !!currentUser && (auto || isCloudBacked)
+
+    if (shouldPostCloud && currentUser) {
+      const user = currentUser
+      void (async () => {
+        try {
+          await api.postBattleResult(battle)
+          if (cancelled) return
+          uploadedTerminalRef.current = bid
+          void queryClient.invalidateQueries({ queryKey: ['battle-results'] })
+          setTerminalPersist('cloud')
+        } catch {
+          if (cancelled) return
+          if (isCloudBacked) {
+            uploadedTerminalRef.current = bid
+            setTerminalPersist('cloud_error')
+          } else {
+            saveBattleToLocalHistory(battle, user)
+            uploadedTerminalRef.current = bid
+            setTerminalPersist('local')
+          }
+        }
+      })()
+    } else if (!isCloudBacked) {
+      saveBattleToLocalHistory(battle, currentUser)
+      uploadedTerminalRef.current = bid
+      setTerminalPersist('local')
+    } else {
+      uploadedTerminalRef.current = bid
+      setTerminalPersist(null)
+    }
+
+    return () => {
+      cancelled = true
+    }
+  }, [battle, battleId, currentUser, queryClient])
+
+  useEffect(() => {
+    if (!openBattleDetailId) return
+    const id = openBattleDetailId
+    setOpeningDetailId(id)
+    let cancelled = false
+
+    void (async () => {
+      if (currentUser) {
+        try {
+          await api.resumeBattle(id)
+          if (cancelled) return
+          cloudBackedBattleRef.current = true
+          removeLocalBattleEntry(id)
+          void queryClient.invalidateQueries({ queryKey: ['battles', id] })
+          setBattleId(id)
+          setReadonlyDetailId(null)
+          onClearOpenBattleDetail()
+          setOpeningDetailId(null)
+          return
+        } catch {
+          /* 仅本地或未上云：只读详情 */
+        }
+      }
+      if (!cancelled) {
+        setReadonlyDetailId(id)
+        onClearOpenBattleDetail()
+      }
+      setOpeningDetailId(null)
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [openBattleDetailId, currentUser?.id, onClearOpenBattleDetail, queryClient])
 
   useEffect(() => {
     if (models.length > 0) {
@@ -104,6 +211,7 @@ export function Battle({ models, problems }: { models: PlatformModel[]; problems
 
   const handleStartBattle = () => {
     if (!canStart) return
+    cloudBackedBattleRef.current = false
     if (battleId) {
       queryClient.removeQueries({ queryKey: ['battles', battleId] })
     }
@@ -215,10 +323,19 @@ export function Battle({ models, problems }: { models: PlatformModel[]; problems
   const detailFailed =
     problemDetailOpen && !!selectedProblem && problemDetailQuery.isError && !problemDetailQuery.data
 
-  return (
-    <div className="space-y-6">
-      {headerSlotEl ? createPortal(headerControls, headerSlotEl) : null}
-
+  const mainPanel =
+    openingDetailId != null ? (
+      <section className="space-y-4">
+        <p className="text-sm text-muted-foreground">正在打开对战详情…</p>
+      </section>
+    ) : readonlyDetailId != null ? (
+      <BattleReadonlyDetail
+        battleId={readonlyDetailId}
+        onClose={() => setReadonlyDetailId(null)}
+        models={models}
+        currentUser={currentUser}
+      />
+    ) : (
       <Result
         battle={battle}
         battleId={battleId}
@@ -232,7 +349,15 @@ export function Battle({ models, problems }: { models: PlatformModel[]; problems
         battleTestsReady={battleTestsReady}
         grading={gradingContext}
         currentUser={currentUser}
+        terminalPersist={terminalPersist}
       />
+    )
+
+  return (
+    <div className="space-y-6">
+      {headerSlotEl ? createPortal(headerControls, headerSlotEl) : null}
+
+      {mainPanel}
 
       <NewProblem
         open={newProblemOpen}

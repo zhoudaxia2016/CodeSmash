@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '../api/client'
 import { useAppStore } from '../stores/appStore'
+import type { BattleSession } from '../types'
 
 export function useMe() {
   return useQuery({
@@ -162,5 +163,44 @@ export function useLeaderboard(problemId?: string) {
   return useQuery({
     queryKey: ['leaderboard', problemId],
     queryFn: () => api.getLeaderboard(problemId),
+  })
+}
+
+export function useBattleResults(enabled: boolean) {
+  return useQuery({
+    queryKey: ['battle-results'],
+    queryFn: () => api.getBattleResults({ limit: 100 }),
+    enabled,
+    staleTime: 30_000,
+  })
+}
+
+export function useBattleResultDetail(battleId: string, enabled: boolean) {
+  return useQuery({
+    queryKey: ['battle-results', battleId],
+    queryFn: () => api.getBattleResult(battleId),
+    enabled: enabled && !!battleId,
+    select: (data) => data.battle,
+  })
+}
+
+export function useSyncBattleToCloud() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (battle: BattleSession) => api.postBattleResult(battle),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['battle-results'] })
+    },
+  })
+}
+
+export function useDeleteBattleResult() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (battleId: string) => api.deleteBattleResult(battleId),
+    onSuccess: (_, battleId) => {
+      void queryClient.invalidateQueries({ queryKey: ['battle-results'] })
+      void queryClient.removeQueries({ queryKey: ['battle-results', battleId] })
+    },
   })
 }

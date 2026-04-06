@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
-import { api } from '@/api/client'
 import { Button } from '@/components/ui/button'
+import { useSyncBattleToCloud } from '@/hooks/useApi'
 import type { AuthUser, BattleSession, ProblemGradingContext, TestCase } from '@/types'
-import { getLocalBattleEntry, markBattleSyncedLocal } from '@/utils/battle-local-history'
+import { getLocalBattleEntry, removeLocalBattleEntry } from '@/utils/battle-local-history'
 import { Compare } from '../compare'
 import { buildMockBattle } from '../lib/mockBattle'
 
@@ -19,6 +19,10 @@ type Props = {
   battleTestsReady: boolean
   grading: ProblemGradingContext
   currentUser: AuthUser | null
+  /** 终局后的落盘方式（由 Battle 在保存完成后写入）。 */
+  terminalPersist?: 'local' | 'cloud' | 'cloud_error' | null
+  /** 只读历史详情：不提交官方结果/追问。 */
+  archiveMode?: boolean
 }
 
 export function Result({
@@ -34,8 +38,10 @@ export function Result({
   battleTestsReady,
   grading,
   currentUser,
+  terminalPersist = null,
+  archiveMode = false,
 }: Props) {
-  const [syncing, setSyncing] = useState(false)
+  const syncMutation = useSyncBattleToCloud()
   const [syncErr, setSyncErr] = useState<string | null>(null)
   const [cloudSynced, setCloudSynced] = useState(false)
 
@@ -47,29 +53,29 @@ export function Result({
   const terminal =
     battle != null && (battle.status === 'completed' || battle.status === 'failed')
   const localEntry = battle && terminal ? getLocalBattleEntry(battle.id) : null
-  const alreadyOnCloud = cloudSynced || localEntry?.syncedAt != null
+  const alreadyOnCloud = cloudSynced
   const canSyncToCloud =
+    !archiveMode &&
     !!currentUser &&
     !!battle &&
     terminal &&
     localEntry != null &&
     !alreadyOnCloud
 
-  const handleSync = async () => {
+  const handleSync = () => {
     if (!battle || !currentUser) return
-    setSyncing(true)
     setSyncErr(null)
-    try {
-      await api.postBattleResult(battle)
-      markBattleSyncedLocal(battle.id)
-      setCloudSynced(true)
-    } catch (e) {
-      setSyncErr(e instanceof Error ? e.message : '同步失败')
-    } finally {
-      setSyncing(false)
-    }
+    syncMutation.mutate(battle, {
+      onSuccess: () => {
+        removeLocalBattleEntry(battle.id)
+        setCloudSynced(true)
+      },
+      onError: (e) => {
+        setSyncErr(e instanceof Error ? e.message : '同步失败')
+      },
+    })
   }
-  if (starting && !battleId) {
+  if (!archiveMode && starting && !battleId) {
     return (
       <section className="space-y-4">
         <p className="text-sm text-muted-foreground">正在创建对战…</p>
@@ -77,7 +83,7 @@ export function Result({
     )
   }
 
-  if (battleLoading) {
+  if (!archiveMode && battleLoading) {
     return (
       <section className="space-y-4">
         <p className="text-sm text-muted-foreground">正在拉取对战状态…</p>
@@ -85,7 +91,7 @@ export function Result({
     )
   }
 
-  if (battleError) {
+  if (!archiveMode && battleError) {
     return (
       <section className="space-y-4">
         <p className="text-sm text-red-600 dark:text-red-400">对战数据加载失败，请确认 API 可用后重试。</p>
@@ -93,7 +99,7 @@ export function Result({
     )
   }
 
-  if (battleId != null && battle == null) {
+  if (!archiveMode && battleId != null && battle == null) {
     return (
       <section className="space-y-4">
         <p className="text-sm text-muted-foreground">暂无对战数据。</p>
@@ -101,8 +107,17 @@ export function Result({
     )
   }
 
+  if (archiveMode && !battle) {
+    return (
+      <section className="space-y-4">
+        <p className="text-sm text-muted-foreground">没有可用的对战详情。</p>
+      </section>
+    )
+  }
+
   const effective = battle ?? buildMockBattle(selectedProblemId)
   const fromServerBattle = battle != null
+  const submitOfficialToServer = fromServerBattle && !archiveMode
   const battleStatusLabel: Record<string, string> = {
     pending: '排队中',
     running: '模型输出中',
@@ -116,10 +131,19 @@ export function Result({
       {fromServerBattle ? (
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex flex-wrap items-center gap-2">
-            {terminal && (
+            {archiveMode ? (
+              <span className="text-xs text-muted-foreground">历史详情（只读）</span>
+            ) : null}
+            {!archiveMode && terminal && (
               <span className="text-xs text-muted-foreground">
-                对战结果已保存到本机浏览器
-                {currentUser && alreadyOnCloud ? ' · 已同步到云端' : ''}
+                {terminalPersist === 'cloud'
+                  ? '对战结果已保存到云端'
+                  : terminalPersist === 'local'
+                    ? '对战结果已保存在本地'
+                    : terminalPersist === 'cloud_error'
+                      ? '云端保存失败，可稍后在 对战历史 中重试'
+                      : '对战已结束，正在保存…'}
+                {currentUser && alreadyOnCloud && terminalPersist === 'local' ? ' · 已同步到云端' : ''}
               </span>
             )}
             {canSyncToCloud && (
@@ -129,10 +153,10 @@ export function Result({
                   variant="secondary"
                   size="sm"
                   className="h-8"
-                  disabled={syncing}
-                  onClick={() => void handleSync()}
+                  disabled={syncMutation.isPending}
+                  onClick={() => handleSync()}
                 >
-                  {syncing ? '同步中…' : '同步到云端'}
+                  {syncMutation.isPending ? '同步中…' : '同步到云端'}
                 </Button>
                 {syncErr ? (
                   <span className="text-xs text-destructive" role="alert">
@@ -165,8 +189,8 @@ export function Result({
           testCases={runTestCases}
           testsReady={battleTestsReady}
           grading={grading}
-          submitOfficialToServer={fromServerBattle}
-          streamBattle={fromServerBattle && battle?.status === 'running'}
+          submitOfficialToServer={submitOfficialToServer}
+          streamBattle={submitOfficialToServer && battle?.status === 'running'}
           battleStatus={fromServerBattle && battle ? battle.status : 'completed'}
         />
       ) : (
