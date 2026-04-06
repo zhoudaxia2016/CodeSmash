@@ -10,6 +10,7 @@ import { BattleHistory } from '@/pages/battle/history'
 import { LeaderboardPage } from '@/pages/leaderboard'
 import { ProblemsPage } from '@/pages/problems'
 import { Admin } from '@/pages/admin'
+import { readBattleDetailIdFromUrl } from '@/utils/battle-url'
 
 type MainView = 'battle' | 'battleHistory' | 'problems' | 'leaderboard' | 'admin'
 type AdminTab = 'models' | 'logs'
@@ -18,11 +19,6 @@ type ShellState = {
   view: MainView
   adminTab: AdminTab
   openBattleDetailId: string | null
-}
-
-function readBattleDetailIdFromUrl(): string | null {
-  const q = new URLSearchParams(window.location.search)
-  return q.get('battle') ?? q.get('replay')
 }
 
 function appPathFromLocation(): string {

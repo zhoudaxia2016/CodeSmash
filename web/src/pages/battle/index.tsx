@@ -5,9 +5,14 @@ import { useQueryClient } from '@tanstack/react-query'
 import { api } from '@/api/client'
 import { useMe, useProblem, useStartBattle, useBattle } from '@/hooks/useApi'
 import { usePersistProblemEditorUpdate } from '@/hooks/usePersistProblemEditorUpdate'
-import type { PlatformModel, Problem, ProblemGradingContext } from '@/types'
-import { removeLocalBattleEntry, saveBattleToLocalHistory } from '@/utils/battle-local-history'
+import type { BattleSession, PlatformModel, Problem, ProblemGradingContext } from '@/types'
+import {
+  getLocalBattleEntry,
+  removeLocalBattleEntry,
+  saveBattleToLocalHistory,
+} from '@/utils/battle-local-history'
 import { loadBattleSetupPrefs, saveBattleSetupPrefs } from '@/utils/battle-setup-prefs'
+import { readBattleDetailIdFromUrl } from '@/utils/battle-url'
 import { loadBattleSyncPrefs } from '@/utils/battle-sync-prefs'
 import { defaultAuthoringModelId } from '@/lib/authoring-model'
 import { ProblemEditor, type ProblemEditorProps } from '@/components/problem-editor'
@@ -22,6 +27,27 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+
+function applyBattleSessionToHeaderSelections(
+  session: BattleSession,
+  problems: Problem[],
+  selectableModels: PlatformModel[],
+  set: {
+    setSelectedProblem: (id: string) => void
+    setModelA: (id: string) => void
+    setModelB: (id: string) => void
+  },
+) {
+  if (session.problemId && problems.some((p) => p.id === session.problemId)) {
+    set.setSelectedProblem(session.problemId)
+  }
+  if (session.modelAId && selectableModels.some((m) => m.id === session.modelAId)) {
+    set.setModelA(session.modelAId)
+  }
+  if (session.modelBId && selectableModels.some((m) => m.id === session.modelBId)) {
+    set.setModelB(session.modelBId)
+  }
+}
 
 const HEADER_SLOT_ID = 'battle-header-slot'
 
@@ -52,6 +78,8 @@ export function Battle({
   /** 从云端恢复进内存的对战：只更新云端，不写本地历史（避免「本地+云端」重复）。 */
   const cloudBackedBattleRef = useRef(false)
   const [startBattleErr, setStartBattleErr] = useState<string | null>(null)
+  /** 已从 session 对齐过顶栏的 `battleId`，避免轮询重复 setState。 */
+  const headerAppliedForBattleIdRef = useRef<string | null>(null)
 
   const { mutate: startBattle, isPending: battleStarting } = useStartBattle()
   const { data: battle, isLoading: battleLoading, isError: battleError } = useBattle(battleId || '')
@@ -93,6 +121,11 @@ export function Battle({
 
   const selectableModels = useMemo(() => models.filter((m) => m.enabled), [models])
 
+  const problemsRef = useRef(problems)
+  const selectableModelsRef = useRef(selectableModels)
+  problemsRef.current = problems
+  selectableModelsRef.current = selectableModels
+
   const [headerSlotEl, setHeaderSlotEl] = useState<HTMLElement | null>(null)
 
   useLayoutEffect(() => {
@@ -101,7 +134,12 @@ export function Battle({
 
   useEffect(() => {
     if (problems.length === 0) return
+    const openingFromUrl =
+      !!openBattleDetailId || readBattleDetailIdFromUrl() != null
     setSelectedProblem((prev) => {
+      if (openingFromUrl) {
+        return problems[0]?.id ?? ''
+      }
       if (prev && problems.some((p) => p.id === prev)) return prev
       const prefs = loadBattleSetupPrefs()
       if (prefs.problemId && problems.some((p) => p.id === prefs.problemId)) {
@@ -109,7 +147,7 @@ export function Battle({
       }
       return problems[0].id
     })
-  }, [problems])
+  }, [problems, openBattleDetailId])
 
   useEffect(() => {
     setProblemDetailOpen(false)
@@ -207,8 +245,58 @@ export function Battle({
   }, [openBattleDetailId, currentUser?.id, queryClient])
 
   useEffect(() => {
+    if (!battleId) headerAppliedForBattleIdRef.current = null
+  }, [battleId])
+
+  useEffect(() => {
+    if (!battleId || !battle || battle.id !== battleId) return
+    if (headerAppliedForBattleIdRef.current === battleId) return
+    if (problems.length === 0 || selectableModels.length === 0) return
+    applyBattleSessionToHeaderSelections(battle, problems, selectableModels, {
+      setSelectedProblem,
+      setModelA,
+      setModelB,
+    })
+    headerAppliedForBattleIdRef.current = battleId
+  }, [battleId, battle, problems, selectableModels])
+
+  useEffect(() => {
+    if (!readonlyDetailId || problems.length === 0 || selectableModels.length === 0) return
+    const local = getLocalBattleEntry(readonlyDetailId)
+    if (!local) return
+    applyBattleSessionToHeaderSelections(local.battle, problems, selectableModels, {
+      setSelectedProblem,
+      setModelA,
+      setModelB,
+    })
+  }, [readonlyDetailId, problems, selectableModels])
+
+  useEffect(() => {
+    if (!readonlyDetailId) return
+    if (getLocalBattleEntry(readonlyDetailId)) return
+    let cancelled = false
+    const id = readonlyDetailId
+    void api.getBattleResult(id).then((r) => {
+      if (cancelled || !r.battle) return
+      applyBattleSessionToHeaderSelections(r.battle, problemsRef.current, selectableModelsRef.current, {
+        setSelectedProblem,
+        setModelA,
+        setModelB,
+      })
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [readonlyDetailId])
+
+  useEffect(() => {
     if (selectableModels.length === 0) return
+    const openingFromUrl =
+      !!openBattleDetailId || readBattleDetailIdFromUrl() != null
     setModelA((prev) => {
+      if (openingFromUrl) {
+        return selectableModels[0]?.id ?? ''
+      }
       if (prev && selectableModels.some((m) => m.id === prev)) return prev
       const prefs = loadBattleSetupPrefs()
       if (prefs.modelAId && selectableModels.some((m) => m.id === prefs.modelAId)) {
@@ -216,26 +304,39 @@ export function Battle({
       }
       return selectableModels[0].id
     })
-  }, [selectableModels])
+  }, [selectableModels, openBattleDetailId])
 
   useEffect(() => {
     if (selectableModels.length === 0) return
-    const prefs = loadBattleSetupPrefs()
+    const openingFromUrl =
+      !!openBattleDetailId || readBattleDetailIdFromUrl() != null
+    const prefs = openingFromUrl ? null : loadBattleSetupPrefs()
     const resolvedA =
       (modelA && selectableModels.some((m) => m.id === modelA) ? modelA : null) ??
-      (prefs.modelAId && selectableModels.some((m) => m.id === prefs.modelAId) ? prefs.modelAId : null) ??
+      (prefs?.modelAId && selectableModels.some((m) => m.id === prefs.modelAId) ? prefs.modelAId : null) ??
       selectableModels[0].id
 
     setModelB((prev) => {
+      if (openingFromUrl) {
+        const alt = selectableModels.find((m) => m.id !== resolvedA)
+        return alt?.id ?? selectableModels[0]?.id ?? ''
+      }
       const valid = (id: string) => selectableModels.some((m) => m.id === id)
       if (prev && valid(prev) && prev !== resolvedA) return prev
-      if (prefs.modelBId && valid(prefs.modelBId) && prefs.modelBId !== resolvedA) return prefs.modelBId
+      if (
+        prefs?.modelBId &&
+        valid(prefs.modelBId) &&
+        prefs.modelBId !== resolvedA
+      ) {
+        return prefs.modelBId
+      }
       const alt = selectableModels.find((m) => m.id !== resolvedA)
       return alt?.id ?? selectableModels[0].id
     })
-  }, [selectableModels, modelA])
+  }, [selectableModels, modelA, openBattleDetailId])
 
   useEffect(() => {
+    if (readBattleDetailIdFromUrl() || openBattleDetailId) return
     if (!selectedProblem || !problems.some((p) => p.id === selectedProblem)) return
     if (!modelA || !modelB || modelA === modelB) return
     if (!selectableModels.some((m) => m.id === modelA) || !selectableModels.some((m) => m.id === modelB)) return
@@ -244,7 +345,7 @@ export function Battle({
       modelAId: modelA,
       modelBId: modelB,
     })
-  }, [selectedProblem, modelA, modelB, problems, selectableModels])
+  }, [selectedProblem, modelA, modelB, problems, selectableModels, openBattleDetailId])
 
   const canStart =
     !!selectedProblem &&
