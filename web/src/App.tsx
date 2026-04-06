@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { api } from '@/api/client'
 import { LoginAutoSyncBattles } from '@/components/login-auto-sync-battles'
@@ -145,6 +145,46 @@ function App() {
     window.addEventListener('popstate', onPop)
     return () => window.removeEventListener('popstate', onPop)
   }, [])
+
+  /** 主壳 tab 切换时拉最新数据；顶层 `useModels`/`useProblems` 不会因切页卸载，仅靠全局 staleTime 不会重请求。 */
+  const shellNavPrimedRef = useRef(false)
+  useEffect(() => {
+    if (!shellNavPrimedRef.current) {
+      shellNavPrimedRef.current = true
+      return
+    }
+    switch (view) {
+      case 'battle':
+        void queryClient.invalidateQueries({ queryKey: ['models'] })
+        void queryClient.invalidateQueries({ queryKey: ['problems'] })
+        void queryClient.invalidateQueries({ queryKey: ['battles'] })
+        break
+      case 'battleHistory':
+        void queryClient.invalidateQueries({ queryKey: ['models'] })
+        void queryClient.invalidateQueries({ queryKey: ['problems'] })
+        void queryClient.invalidateQueries({ queryKey: ['battle-results'] })
+        break
+      case 'problems':
+        void queryClient.invalidateQueries({ queryKey: ['models'] })
+        void queryClient.invalidateQueries({ queryKey: ['problems'] })
+        break
+      case 'leaderboard':
+        void queryClient.invalidateQueries({ queryKey: ['problems'] })
+        void queryClient.invalidateQueries({ queryKey: ['leaderboard'] })
+        break
+      case 'admin':
+        if (user?.role === 'admin') {
+          if (adminTab === 'models') {
+            void queryClient.invalidateQueries({ queryKey: ['admin', 'models'] })
+          } else {
+            void queryClient.invalidateQueries({ queryKey: ['admin', 'logs'] })
+          }
+        }
+        break
+      default:
+        break
+    }
+  }, [view, adminTab, user?.role, queryClient])
 
   useEffect(() => {
     const err = new URLSearchParams(window.location.search).get('auth_error')
