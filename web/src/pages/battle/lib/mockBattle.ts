@@ -77,35 +77,43 @@ export function buildMockBattle(problemId: string): BattleSession {
     completedAt: '',
     modelAResult: {
       modelId: 'mock-a',
-      status: 'running',
-      phase: 'awaiting_execution',
-      thought: MOCK_SOLUTION_MARKDOWN_A,
-      codingThought: '',
-      code: 'function main(nums, target) {\n  let left = 0, right = nums.length - 1;\n  while (left < right) {\n    const sum = nums[left] + nums[right];\n    if (sum === target) return [left, right];\n    sum < target ? left++ : right--;\n  }\n  return [];\n}',
-      selfTestCases: [
-        { input: '[2,7,11,15], 9', expectedOutput: '[0,1]' },
-        { input: '[3,2,4], 6', expectedOutput: '[1,2]' },
+      result: [
+        {
+          status: 'running',
+          phase: 'awaiting_execution',
+          thought: MOCK_SOLUTION_MARKDOWN_A,
+          codingThought: '',
+          code: 'function main(nums, target) {\n  let left = 0, right = nums.length - 1;\n  while (left < right) {\n    const sum = nums[left] + nums[right];\n    if (sum === target) return [left, right];\n    sum < target ? left++ : right--;\n  }\n  return [];\n}',
+          selfTestCases: [
+            { input: '[2,7,11,15], 9', expectedOutput: '[0,1]' },
+            { input: '[3,2,4], 6', expectedOutput: '[1,2]' },
+          ],
+          selfTestConclusion: '自测通过',
+          analysisTimeMs: 72,
+          codingTimeMs: 48,
+          timeMs: 120,
+        },
       ],
-      selfTestConclusion: '自测通过',
-      analysisTimeMs: 72,
-      codingTimeMs: 48,
-      timeMs: 120,
     },
     modelBResult: {
       modelId: 'mock-b',
-      status: 'running',
-      phase: 'awaiting_execution',
-      thought: MOCK_SOLUTION_MARKDOWN_B,
-      codingThought: '',
-      code: 'function main(nums, target) {\n  const map = new Map();\n  for (let i = 0; i < nums.length; i++) {\n    const complement = target - nums[i];\n    if (map.has(complement)) return [map.get(complement), i];\n    map.set(nums[i], i);\n  }\n  return [];\n}',
-      selfTestCases: [
-        { input: '[2,7,11,15], 9', expectedOutput: '[0,1]' },
-        { input: '[3,2,4], 6', expectedOutput: '[1,2]' },
+      result: [
+        {
+          status: 'running',
+          phase: 'awaiting_execution',
+          thought: MOCK_SOLUTION_MARKDOWN_B,
+          codingThought: '',
+          code: 'function main(nums, target) {\n  const map = new Map();\n  for (let i = 0; i < nums.length; i++) {\n    const complement = target - nums[i];\n    if (map.has(complement)) return [map.get(complement), i];\n    map.set(nums[i], i);\n  }\n  return [];\n}',
+          selfTestCases: [
+            { input: '[2,7,11,15], 9', expectedOutput: '[0,1]' },
+            { input: '[3,2,4], 6', expectedOutput: '[1,2]' },
+          ],
+          selfTestConclusion: '自测通过',
+          analysisTimeMs: 55,
+          codingTimeMs: 40,
+          timeMs: 95,
+        },
       ],
-      selfTestConclusion: '自测通过',
-      analysisTimeMs: 55,
-      codingTimeMs: 40,
-      timeMs: 95,
     },
   }
 }

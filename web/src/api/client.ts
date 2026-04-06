@@ -192,6 +192,22 @@ export const api = {
     return handleResponse(res)
   },
 
+  async refineBattle(
+    battleId: string,
+    payload: {
+      side: 'modelA' | 'modelB'
+      userMessage?: string
+      includeFailedCases?: boolean
+    },
+  ): Promise<{ battle: import('../types').BattleSession }> {
+    const res = await apiFetch(`${API_BASE}/battles/${battleId}/refine`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+    return handleResponse(res)
+  },
+
   async pollBattle(battleId: string, intervalMs?: number): Promise<{ battle: import('../types').BattleSession }> {
     const res = await apiFetch(`${API_BASE}/battles/${battleId}/poll?interval=${intervalMs || 1000}`)
     return handleResponse(res)

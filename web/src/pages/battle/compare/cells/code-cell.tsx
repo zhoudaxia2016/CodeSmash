@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { Check, ChevronRight, Copy } from 'lucide-react'
+import { Check, ChevronRight, Copy, GitCompare } from 'lucide-react'
 import { useStickToBottomScroll } from '@/hooks/useStickToBottomScroll'
 import { CodeBlock } from '@/components/code-block'
 import { MarkdownViewer } from '@/components/markdown-viewer'
@@ -10,12 +10,25 @@ import {
   PHASE_CARD_OUTER,
 } from '../../lib/battlePhaseLayout'
 import { rawCodeStillHasThinkingXml } from '../../lib/modelCodeGuards'
-import type { ModelSideHook } from '../../lib/battleTypes'
+import type { ModelRound } from '@/types'
 import {
   sanitizeCodingThoughtForDisplay,
   splitThinkingFromModelCode,
   stripCodeFences,
 } from '@/lib/stripCodeFences'
+import { diffLines } from 'diff'
+
+/** Runnable-looking code for diff/copy（与下列 CodeCell 内提取逻辑一致）。 */
+export function comparableCodeFromRound(r: ModelRound | undefined): string {
+  if (!r) return ''
+  const raw = r.code ?? ''
+  const ct = (r.codingThought ?? '').trim()
+  const useServerFields = ct.length > 0 || !rawCodeStillHasThinkingXml(raw)
+  const split = useServerFields
+    ? { thinking: r.codingThought ?? '', code: raw }
+    : splitThinkingFromModelCode(raw)
+  return stripCodeFences(split.code).trim()
+}
 
 function CopyModelCodeButton({ text }: { text: string }) {
   const [done, setDone] = useState(false)
@@ -47,28 +60,108 @@ function CopyModelCodeButton({ text }: { text: string }) {
   )
 }
 
-export function CodeCell({ battleId, hook }: { battleId: string; hook: ModelSideHook }) {
-  const { displayResult, showCode } = hook
+function CodeLineDiffPanel({ before, after }: { before: string; after: string }) {
+  const parts = diffLines(before, after)
+  return (
+    <div
+      className={`${CODE_BLOCK_INNER} max-h-[min(50vh,24rem)] overflow-auto rounded-md border border-border/70 bg-muted/20 p-2`}
+    >
+      <pre className="m-0 whitespace-pre-wrap break-words font-mono text-xs leading-relaxed">
+        {parts.flatMap((part, pi) => {
+          const raw = part.value
+          const lines = raw.endsWith('\n') ? raw.slice(0, -1).split('\n') : raw.split('\n')
+          const mark = part.added ? '+' : part.removed ? '-' : ' '
+          const lineCls = part.added
+            ? 'bg-emerald-500/15 text-foreground'
+            : part.removed
+              ? 'bg-red-500/15 text-foreground'
+              : 'text-muted-foreground'
+          return lines.map((line, li) => (
+            <div key={`${pi}-${li}`} className={`px-1 ${lineCls}`}>
+              <span className="select-none tabular-nums text-muted-foreground/80">{mark} </span>
+              {line || '\u00a0'}
+            </div>
+          ))
+        })}
+      </pre>
+    </div>
+  )
+}
+
+function DiffToggleButton({
+  active,
+  onClick,
+}: {
+  active: boolean
+  onClick: () => void
+}) {
+  return (
+    <Button
+      type="button"
+      variant="ghost"
+      size="icon"
+      className={`h-8 w-8 bg-background/90 shadow-sm ring-1 ring-border/50 backdrop-blur-sm hover:bg-accent hover:text-foreground ${
+        active ? 'text-primary ring-primary/40' : 'text-muted-foreground'
+      }`}
+      onClick={onClick}
+      title={active ? '关闭对比' : '与上一轮 diff'}
+      aria-label={active ? '关闭对比' : '与上一轮 diff'}
+      aria-pressed={active}
+    >
+      <GitCompare className="h-4 w-4" aria-hidden />
+    </Button>
+  )
+}
+
+export function CodeCell({
+  battleId,
+  viewRound,
+  isViewingLatest,
+  previousComparableCode,
+}: {
+  battleId: string
+  viewRound: ModelRound | undefined
+  isViewingLatest: boolean
+  /** 上一轮可比对代码；无则不出 diff 按钮（首轮）。 */
+  previousComparableCode?: string
+}) {
+  if (viewRound === undefined) {
+    return (
+      <div className="group relative flex h-full min-h-0 min-w-0 flex-col">
+        <div className={PHASE_CARD_OUTER}>
+          <div className={`${PHASE_CARD_INNER_SCROLL} p-3 text-sm text-muted-foreground`}>
+            该模型尚无这一轮输出。
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  const displayResult = viewRound
   const raw = displayResult.code ?? ''
   const ct = (displayResult.codingThought ?? '').trim()
-  /** Battle API splits thinking vs code on the server; client split only for legacy rows with merged XML. */
   const useServerFields = ct.length > 0 || !rawCodeStillHasThinkingXml(raw)
   const split = useServerFields
     ? { thinking: displayResult.codingThought ?? '', code: raw }
     : splitThinkingFromModelCode(raw)
   const thinking = sanitizeCodingThoughtForDisplay(split.thinking)
-  const codeForHighlight = stripCodeFences(split.code)
+  const codeForHighlight = comparableCodeFromRound(displayResult)
   const hasThinkingUi = thinking.trim().length > 0
   const hasCodeUi = codeForHighlight.trim().length > 0
 
-  const codeStreaming = displayResult.phase === 'coding'
+  const codeStreaming = Boolean(isViewingLatest && displayResult.phase === 'coding')
   const [thinkingOpen, setThinkingOpen] = useState(() => codeStreaming)
   useEffect(() => {
-    setThinkingOpen(displayResult.phase === 'coding')
-  }, [battleId, displayResult.phase])
+    setThinkingOpen(isViewingLatest && displayResult.phase === 'coding')
+  }, [battleId, displayResult.phase, isViewingLatest])
+
+  const showCode =
+    displayResult.phase === 'coding' ||
+    displayResult.phase === 'awaiting_execution' ||
+    displayResult.phase === 'completed' ||
+    (displayResult.code && displayResult.code.length > 0)
 
   const showThinkingUi = !!(thinking && showCode && (hasThinkingUi || hasCodeUi))
-  /** 生成结束后顶栏折叠，避免长思考挤占代码区；流式中与代码同属主滚动区 */
   const dockThinking = showThinkingUi && !codeStreaming
 
   const codePhaseScroll = useStickToBottomScroll({
@@ -153,16 +246,23 @@ export function CodeCell({ battleId, hook }: { battleId: string; hook: ModelSide
       </div>
     ) : null
 
-  const showCopy =
-    !!codeForHighlight && showCode && (hasThinkingUi || hasCodeUi)
+  const showCopy = !!codeForHighlight && showCode && (hasThinkingUi || hasCodeUi)
+  const canDiff =
+    Boolean(previousComparableCode) && !!codeForHighlight.trim() && showCode && (hasThinkingUi || hasCodeUi)
+  const [diffOpen, setDiffOpen] = useState(false)
+
+  useEffect(() => {
+    setDiffOpen(false)
+  }, [battleId, codeForHighlight, previousComparableCode])
 
   return (
     <div className="group relative flex h-full min-h-0 min-w-0 flex-col">
       {showCopy ? (
         <div
-          className="pointer-events-none absolute right-2 z-30 opacity-0 transition-opacity duration-150 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100"
+          className="pointer-events-none absolute right-2 z-30 flex gap-1 opacity-0 transition-opacity duration-150 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100"
           style={{ top: thinkingDockPx + 8 }}
         >
+          {canDiff ? <DiffToggleButton active={diffOpen} onClick={() => setDiffOpen((v) => !v)} /> : null}
           <CopyModelCodeButton text={codeForHighlight} />
         </div>
       ) : null}
@@ -175,7 +275,7 @@ export function CodeCell({ battleId, hook }: { battleId: string; hook: ModelSide
           style={thinkingDockPx > 0 ? { paddingTop: thinkingDockPx } : undefined}
         >
           {displayResult.phase === 'coding' && !hasThinkingUi && !hasCodeUi && (
-            <p className="text-sm text-muted-foreground px-3 py-3">正在生成代码…</p>
+            <p className="px-3 py-3 text-sm text-muted-foreground">正在生成代码…</p>
           )}
           {showCode && (hasThinkingUi || hasCodeUi) && (
             <div className="space-y-4 p-3">
@@ -194,12 +294,19 @@ export function CodeCell({ battleId, hook }: { battleId: string; hook: ModelSide
                 </div>
               ) : null}
               {codeForHighlight ? (
-                <div className={CODE_BLOCK_INNER}>
-                  <CodeBlock
-                    code={codeForHighlight}
-                    className="m-0 overflow-x-auto whitespace-pre-wrap break-words font-mono text-sm leading-relaxed text-foreground"
-                  />
-                </div>
+                diffOpen && canDiff && previousComparableCode !== undefined ? (
+                  <div className="space-y-2">
+                    <p className="text-xs text-muted-foreground">对比上一轮代码（- 删除 / + 新增）</p>
+                    <CodeLineDiffPanel before={previousComparableCode} after={codeForHighlight} />
+                  </div>
+                ) : (
+                  <div className={CODE_BLOCK_INNER}>
+                    <CodeBlock
+                      code={codeForHighlight}
+                      className="m-0 overflow-x-auto whitespace-pre-wrap break-words font-mono text-sm leading-relaxed text-foreground"
+                    />
+                  </div>
+                )
               ) : thinking ? (
                 <p className="text-sm text-muted-foreground">
                   暂无独立代码块（请展开「思考」查看过程）
@@ -208,7 +315,9 @@ export function CodeCell({ battleId, hook }: { battleId: string; hook: ModelSide
             </div>
           )}
           {displayResult.selfTestConclusion && !displayResult.officialResult && (
-            <p className="mt-1 px-3 pb-3 text-xs text-muted-foreground">{displayResult.selfTestConclusion}</p>
+            <p className="mt-1 px-3 pb-3 text-xs text-muted-foreground">
+              {displayResult.selfTestConclusion}
+            </p>
           )}
         </div>
       </div>

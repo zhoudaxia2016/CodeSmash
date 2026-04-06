@@ -1,18 +1,30 @@
 import { useEffect, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { api } from '@/api/client'
-import type { ModelResult, ProblemGradingContext, TestCase, TestResult } from '@/types'
+import type {
+  ModelResult,
+  ModelRound,
+  ProblemGradingContext,
+  TestCase,
+  TestResult,
+} from '@/types'
+import { currentBattleRound } from '@/utils/battle-round'
 import { useSandbox } from '@/utils/sandbox'
 
-export function officialMetrics(r: ModelResult) {
+const FALLBACK_ROUND: ModelRound = {
+  phase: 'pending',
+  status: 'running',
+}
+
+export function officialMetrics(r: ModelRound) {
   const o = r.officialResult
   if (o) return { passed: o.passed, total: o.total }
   return { passed: 0, total: 0 }
 }
 
-export function activityLabel(r: ModelResult): string {
-  const statusLabel = (status: ModelResult['status']): string => {
-    const map: Record<ModelResult['status'], string> = {
+export function activityLabel(r: ModelRound): string {
+  const statusLabel = (status: ModelRound['status']): string => {
+    const map: Record<ModelRound['status'], string> = {
       pending: '排队',
       thinking: '思考中',
       coding: '生成代码中',
@@ -64,33 +76,43 @@ export function useBattleModelSide({
   const { runCodeWithProgress } = useSandbox()
   const [runProgress, setRunProgress] = useState<{ done: number; total: number } | null>(null)
   const [localPhase, setLocalPhase] = useState<'idle' | 'running_tests' | 'done' | 'error'>('idle')
-  const [localOfficial, setLocalOfficial] = useState<ModelResult['officialResult'] | null>(null)
+  const [localOfficial, setLocalOfficial] = useState<ModelRound['officialResult'] | null>(null)
   const [officialError, setOfficialError] = useState<'run' | 'save' | null>(null)
   const [runFailureDetail, setRunFailureDetail] = useState<string | null>(null)
   const ranRef = useRef(false)
 
-  const displayResult: ModelResult =
+  const cur = currentBattleRound(result) ?? FALLBACK_ROUND
+
+  useEffect(() => {
+    setLocalOfficial(null)
+    setLocalPhase('idle')
+    setOfficialError(null)
+    setRunFailureDetail(null)
+    ranRef.current = false
+  }, [battleId, result.result.length])
+
+  const displayResult: ModelRound =
     localOfficial != null
-      ? { ...result, officialResult: localOfficial, phase: 'completed', status: 'completed' }
-      : result
+      ? { ...cur, officialResult: localOfficial, phase: 'completed', status: 'completed' }
+      : cur
 
   const { passed, total } = officialMetrics(displayResult)
   const ok = displayResult.status === 'completed' && displayResult.phase === 'completed'
-  const failedLlm = result.status === 'failed' || result.phase === 'failed'
+  const failedLlm = cur.status === 'failed' || cur.phase === 'failed'
   const testCaseCount = testCases.length
   const runningOfficial = localPhase === 'running_tests'
   const showOfficialSection =
     !failedLlm && !runningOfficial && displayResult.officialResult != null
 
   useEffect(() => {
-    if (!battleId || result.officialResult) return
+    if (!battleId || cur.officialResult) return
     if (!testsReady) return
-    if (result.phase !== 'awaiting_execution') return
+    if (cur.phase !== 'awaiting_execution') return
     if (failedLlm) return
     if (ranRef.current) return
     ranRef.current = true
 
-    const code = (result.code ?? '').trim()
+    const code = (cur.code ?? '').trim()
     if (!code || testCases.length === 0) {
       const emptyOfficial = {
         passed: 0,
@@ -161,10 +183,11 @@ export function useBattleModelSide({
     side,
     failedLlm,
     queryClient,
-    result.code,
-    result.officialResult,
-    result.phase,
-    result.status,
+    cur.code,
+    cur.officialResult,
+    cur.phase,
+    cur.status,
+    result.result.length,
     runCodeWithProgress,
     submitOfficialToServer,
     testCases,
@@ -174,12 +197,10 @@ export function useBattleModelSide({
 
   const phase = displayResult.phase ?? 'pending'
 
-  /** 顺序展示：分析结束前不显示代码区与官方用例区 */
   const showCodePhase =
     phase !== 'pending' &&
     phase !== 'analyzing' &&
     !(phase === 'failed' && !String(displayResult.code ?? '').trim())
-  /** 代码生成中不显示官方用例；进入待评测/完成/失败（已过代码阶段）后再显示 */
   const showOfficialPhase = showCodePhase && phase !== 'coding'
 
   const showAnalysis =
@@ -196,7 +217,6 @@ export function useBattleModelSide({
 
   return {
     displayResult,
-    result,
     failedLlm,
     ok,
     passed,

@@ -1,9 +1,12 @@
-import { useEffect, useLayoutEffect, useRef } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef } from 'react'
 import { MAIN_STICK_NEAR_PX } from '../lib/battlePhaseLayout'
 
 type Props = {
   battleId: string
   force: boolean
+  /** 为 false 时，该侧 thought/code/runDone 变化不触发粘底（另一侧不受影响） */
+  followContentA: boolean
+  followContentB: boolean
   thoughtA?: string
   codeA?: string
   thoughtB?: string
@@ -12,10 +15,22 @@ type Props = {
   runDoneB?: number
 }
 
-/** 对战内容变高时滚动外层 <main>；流式对战默认粘底，用户离开底部后不再自动滚；非流式仅当已在底部时跟随增高 */
+function sideScrollFingerprint(
+  follow: boolean,
+  thought: string | undefined,
+  code: string | undefined,
+  runDone: number | undefined,
+): string {
+  if (!follow) return '\0'
+  return `${thought ?? ''}\0${code ?? ''}\0${runDone ?? ''}`
+}
+
+/** 对战内容变高时滚动外层 <main>；流式对战默认粘底，用户离开底部后不再自动滚 */
 export function MainAutoScroll({
   battleId,
   force,
+  followContentA,
+  followContentB,
   thoughtA,
   codeA,
   thoughtB,
@@ -24,17 +39,33 @@ export function MainAutoScroll({
   runDoneB,
 }: Props) {
   const stickRef = useRef(false)
+
+  const scrollSyncKey = useMemo(
+    () =>
+      `${battleId}|${force}|${sideScrollFingerprint(followContentA, thoughtA, codeA, runDoneA)}|${sideScrollFingerprint(followContentB, thoughtB, codeB, runDoneB)}`,
+    [
+      battleId,
+      force,
+      followContentA,
+      followContentB,
+      thoughtA,
+      codeA,
+      thoughtB,
+      codeB,
+      runDoneA,
+      runDoneB,
+    ],
+  )
+
   useLayoutEffect(() => {
     stickRef.current = force
   }, [battleId, force])
 
   useLayoutEffect(() => {
     const main = document.querySelector('main')
-    if (!main) return
-    if (stickRef.current) {
-      main.scrollTop = main.scrollHeight
-    }
-  }, [force, battleId, thoughtA, codeA, thoughtB, codeB, runDoneA, runDoneB])
+    if (!main || !stickRef.current) return
+    main.scrollTop = main.scrollHeight
+  }, [scrollSyncKey])
 
   useEffect(() => {
     const main = document.querySelector('main')

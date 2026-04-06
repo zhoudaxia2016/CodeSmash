@@ -167,6 +167,7 @@ export function Result({
           grading={grading}
           submitOfficialToServer={fromServerBattle}
           streamBattle={fromServerBattle && battle?.status === 'running'}
+          battleStatus={fromServerBattle && battle ? battle.status : 'completed'}
         />
       ) : (
         <div className="grid gap-4 text-sm text-muted-foreground sm:grid-cols-2">

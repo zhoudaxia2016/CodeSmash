@@ -66,13 +66,22 @@ export interface BattleSession {
   completedAt?: string
 }
 
-export interface ModelResult {
-  modelId: string
-  status: 'pending' | 'thinking' | 'coding' | 'selfTesting' | 'running' | 'completed' | 'failed' | 'error' | 'timeout'
-  /** Server-driven LLM + client test pipeline stage */
-  phase?: ModelPhase
+/** Single model-side battle round; server streams into `result[last]`. */
+export type ModelSideStatus =
+  | 'pending'
+  | 'thinking'
+  | 'coding'
+  | 'selfTesting'
+  | 'running'
+  | 'completed'
+  | 'failed'
+  | 'error'
+  | 'timeout'
+
+export interface ModelRound {
+  /** 由追问创建该轮时，用户输入的原文（用于服务端多轮对话回放）。首轮无此字段。 */
+  refineUserMessage?: string
   thought?: string
-  /** Server-split code-phase reasoning; when absent, UI derives from `code` via heuristics. */
   codingThought?: string
   code?: string
   selfTestCases?: SelfTestCase[]
@@ -88,6 +97,14 @@ export interface ModelResult {
   timeMs?: number
   analysisTimeMs?: number
   codingTimeMs?: number
+  phase: ModelPhase
+  status: ModelSideStatus
+}
+
+/** Per-model battle output: only `modelId` + `result[]` (last item is current round). */
+export interface ModelResult {
+  modelId: string
+  result: ModelRound[]
 }
 
 export interface SelfTestCase {

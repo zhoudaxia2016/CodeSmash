@@ -1,5 +1,5 @@
 import { formatDurationSeconds } from '@/lib/formatDuration'
-import type { ModelResult } from '@/types'
+import type { ModelRound } from '@/types'
 
 export function LabeledDuration({
   label,
@@ -25,7 +25,7 @@ export function CompactOfficialTiming({
   r,
   runningOfficial,
 }: {
-  r: ModelResult
+  r: ModelRound
   runningOfficial: boolean
 }) {
   const modelMs = r.timeMs ?? 0

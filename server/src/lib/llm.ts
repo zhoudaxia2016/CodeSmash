@@ -368,13 +368,11 @@ ${functionSignature}
 - 禁止在回复中出现 \`<redacted_thinking>\`、\`</think>\` 或 \`<thinking>\` 等标签字面量（会导致评测解析失败）。`
 }
 
-export async function* streamProblemAnalysis(
-  provider: 'minimax' | 'deepseek',
-  platformModelId: string,
+export function buildAnalysisRoundZeroUserContent(
   problem: ProblemPayload,
-  options: StreamLlmOptions,
-): AsyncGenerator<string, void, unknown> {
-  const user = `题目：${problem.title}
+  gradingMode: 'expected' | 'verify',
+): string {
+  const core = `题目：${problem.title}
 
 题目描述：
 ${problem.description}
@@ -383,6 +381,198 @@ ${problem.description}
 ${problem.functionSignature}
 
 请说明你打算如何求解本题。注意：不要写代码。`
+  if (gradingMode === 'verify') {
+    return `说明：本题使用 verify 脚本判题（非纯期望输出对比）。\n\n${core}`
+  }
+  return core
+}
+
+export function buildCodePhaseInstructionUserContent(problem: ProblemPayload): string {
+  return (
+    `请写出 JavaScript 实现：仅一个符合签名的 ${problem.entryPoint}，不要重复实现。` +
+    `基于你上文的分析完成实现；不要在输出中重复大段说明文字。` +
+    `直接输出可执行源码，不要在整段外加双引号或单引号，不要用字符串包裹 function，不要在 function 后加分析。`
+  )
+}
+
+/** Minimal shape for replaying closed battle rounds as chat messages (refine / logs). */
+export type BattleRoundHistoryPayload = {
+  thought: string
+  codingThought: string
+  code: string
+  refineUserMessage?: string
+  officialResult?: {
+    passed: number
+    total: number
+    timeMs: number
+    details?: Array<{
+      passed: boolean
+      input: string
+      expectedOutput: string
+      actualOutput: string
+    }>
+  }
+}
+
+function formatFailedCasesForHistory(
+  details:
+    | Array<{
+        passed: boolean
+        input: string
+        expectedOutput: string
+        actualOutput: string
+      }>
+    | undefined,
+  include: boolean,
+): string | undefined {
+  if (!include || !details?.length) return undefined
+  const failed = details.filter((d) => !d.passed)
+  if (!failed.length) return undefined
+  return failed
+    .map(
+      (d, i) =>
+        `用例 ${i + 1}：\n输入：${d.input}\n期望：${d.expectedOutput}\n实际：${d.actualOutput}\n`,
+    )
+    .join('\n')
+}
+
+export function buildOfficialFeedbackUserContent(
+  roundIndex: number,
+  round: BattleRoundHistoryPayload,
+  includeFailed: boolean,
+): string {
+  const o = round.officialResult
+  let s = `【第 ${roundIndex + 1} 轮 · 评测结果】\n通过 ${o?.passed ?? 0}/${o?.total ?? 0}，执行耗时 ${
+    o?.timeMs ?? 0
+  } ms`
+  const fb = formatFailedCasesForHistory(o?.details, includeFailed)
+  if (fb) s += `\n\n未通过用例详情：\n${fb}`
+  return s
+}
+
+function buildAssistantCodePhaseContent(codingThought: string, code: string): string {
+  const ct = codingThought.trim()
+  const c = code.trim()
+  if (ct && c) return `${ct}\n\n${c}`
+  if (c) return c
+  if (ct) return ct
+  return '（该轮未产生代码阶段文本。）'
+}
+
+const ANALYSIS_REFINE_SYSTEM = `你是算法设计专家。你与用户就同一道编程题进行多轮对话；消息历史中已包含题目全文、你此前的分析与代码、以及各轮评测结果。
+**最新一条用户消息**中会同时给出本轮官方评测结果（及可选的未通过用例详情）以及用户的追问或补充说明；请据此重新阐述本轮打算采用的思路（可修正或推翻此前方案）。
+
+要求与首轮分析一致：思路、复杂度、边界；不要写代码、不要用 Markdown 代码块、不要输出可执行 JavaScript。`
+
+/**
+ * 追问侧 user 片段（不含评测块）。题目已在历史首条 user 中。
+ * 无补充文字时不写「无补充」类说明，仅保留任务句。
+ */
+export function buildRefineFollowUpUserContent(userMessage: string): string {
+  const t = userMessage.trim()
+  if (t) {
+    return `【用户追问 / 补充说明】\n${t}\n\n请在此基础上重新说明本轮打算如何求解。注意：不要写代码、不要输出可执行 JavaScript。`
+  }
+  return `请结合上述评测结果重新说明本轮打算如何求解。注意：不要写代码、不要输出可执行 JavaScript。`
+}
+
+/** 单条 user：官方评测（含可选失败用例）+ 追问说明，供新一轮 refine 使用。 */
+export function buildOfficialPlusRefineUserMessage(
+  roundIndex: number,
+  round: BattleRoundHistoryPayload,
+  includeFailed: boolean,
+  userRefineRaw: string,
+): string {
+  const official = buildOfficialFeedbackUserContent(roundIndex, round, includeFailed)
+  const refine = buildRefineFollowUpUserContent(userRefineRaw)
+  return `${official}\n\n${refine}`
+}
+
+/**
+ * 所有已结束轮次直到**最后一轮代码 assistant 之后**（不含最后一轮的评测 user；由调用方与新一轮追问合并为一条 user）。
+ */
+export function buildBattleClosedRoundsHistoryMessages(
+  problem: ProblemPayload,
+  gradingMode: 'expected' | 'verify',
+  rounds: BattleRoundHistoryPayload[],
+  includeFailed: boolean,
+): ChatMessage[] {
+  const out: ChatMessage[] = []
+  if (rounds.length === 0) return out
+
+  for (let i = 0; i < rounds.length; i++) {
+    const r = rounds[i]
+    if (i === 0) {
+      out.push({ role: 'user', content: buildAnalysisRoundZeroUserContent(problem, gradingMode) })
+      out.push({ role: 'assistant', content: r.thought.trim() || '（未产生分析文本。）' })
+    } else {
+      const prev = rounds[i - 1]
+      const rawRef = rounds[i].refineUserMessage ?? ''
+      out.push({
+        role: 'user',
+        content: buildOfficialPlusRefineUserMessage(i - 1, prev, includeFailed, rawRef),
+      })
+      out.push({ role: 'assistant', content: r.thought.trim() || '（未产生分析文本。）' })
+    }
+    out.push({ role: 'user', content: buildCodePhaseInstructionUserContent(problem) })
+    out.push({
+      role: 'assistant',
+      content: buildAssistantCodePhaseContent(r.codingThought, r.code),
+    })
+  }
+  return out
+}
+
+export async function* streamBattleRefineAnalysis(
+  provider: 'minimax' | 'deepseek',
+  platformModelId: string,
+  historyThroughLastCodeAssistant: ChatMessage[],
+  officialPlusRefineUserContent: string,
+  options: StreamLlmOptions,
+): AsyncGenerator<string, void, unknown> {
+  const logLabel = options.logLabel ? `${options.logLabel} analysis_refine` : 'analysis_refine'
+  const messages: ChatMessage[] = [
+    { role: 'system', content: ANALYSIS_REFINE_SYSTEM },
+    ...historyThroughLastCodeAssistant,
+    { role: 'user', content: officialPlusRefineUserContent },
+  ]
+  for await (const part of streamChatParts(provider, platformModelId, messages, {
+    ...options,
+    logLabel,
+  })) {
+    yield part.text
+  }
+}
+
+export async function* streamBattleRefineCode(
+  provider: 'minimax' | 'deepseek',
+  platformModelId: string,
+  problem: ProblemPayload,
+  historyThroughLastCodeAssistant: ChatMessage[],
+  officialPlusRefineUserContent: string,
+  analysis: string,
+  options: StreamLlmOptions,
+): AsyncGenerator<ChatStreamPart, void, unknown> {
+  const assistantAnalysis = analysis.trim() || '（上一步未产生分析文本。）'
+  const logLabel = options.logLabel ? `${options.logLabel} code` : 'code'
+  const messages: ChatMessage[] = [
+    { role: 'system', content: buildCodeSystem(problem.entryPoint, problem.functionSignature) },
+    ...historyThroughLastCodeAssistant,
+    { role: 'user', content: officialPlusRefineUserContent },
+    { role: 'assistant', content: assistantAnalysis },
+    { role: 'user', content: buildCodePhaseInstructionUserContent(problem) },
+  ]
+  yield* streamChatParts(provider, platformModelId, messages, { ...options, logLabel })
+}
+
+export async function* streamProblemAnalysis(
+  provider: 'minimax' | 'deepseek',
+  platformModelId: string,
+  problem: ProblemPayload,
+  gradingMode: 'expected' | 'verify',
+  options: StreamLlmOptions,
+): AsyncGenerator<string, void, unknown> {
+  const user = buildAnalysisRoundZeroUserContent(problem, gradingMode)
 
   const logLabel = options.logLabel
     ? `${options.logLabel} analysis`
@@ -395,32 +585,26 @@ ${problem.functionSignature}
   }
 }
 
+/**
+ * 代码阶段：第二次 HTTP 请求（因需换 `system` 为代码约束）。`messages` 与首轮分析**同一条对话线程**：
+ * 首条 `user` 与 `streamProblemAnalysis` 中**完全一致**（含 verify 说明），接着是上一步的 `assistant`，再接写代码指令。
+ */
 export async function* streamProblemCode(
   provider: 'minimax' | 'deepseek',
   platformModelId: string,
   problem: ProblemPayload,
+  gradingMode: 'expected' | 'verify',
   analysis: string,
   options: StreamLlmOptions,
 ): AsyncGenerator<ChatStreamPart, void, unknown> {
-  const problemUser = `题目：${problem.title}
-
-题目描述：
-${problem.description}
-
-要求的函数签名（请严格按此声明实现）：
-${problem.functionSignature}`
-
+  const analysisPhaseUser = buildAnalysisRoundZeroUserContent(problem, gradingMode)
   const assistantAnalysis = analysis.trim() || '（上一步未产生分析文本。）'
-
-  const codeUser =
-    `请写出 JavaScript 实现：仅一个符合签名的 ${problem.entryPoint}，不要重复实现。` +
-    `基于你上文的分析完成实现；不要在输出中重复大段说明文字。` +
-    `直接输出可执行源码，不要在整段外加双引号或单引号，不要用字符串包裹 function，不要在 function 后加分析。`
+  const codeUser = buildCodePhaseInstructionUserContent(problem)
 
   const logLabel = options.logLabel ? `${options.logLabel} code` : 'code'
   yield* streamChatParts(provider, platformModelId, [
     { role: 'system', content: buildCodeSystem(problem.entryPoint, problem.functionSignature) },
-    { role: 'user', content: problemUser },
+    { role: 'user', content: analysisPhaseUser },
     { role: 'assistant', content: assistantAnalysis },
     { role: 'user', content: codeUser },
   ], { ...options, logLabel })
@@ -488,13 +672,17 @@ export async function callLLM(provider: 'minimax' | 'deepseek', request: LLMRequ
   }
 
   let thought = ''
-  for await (const d of streamProblemAnalysis(provider, request.model, request.problem, { source: 'other' })) {
+  for await (const d of streamProblemAnalysis(provider, request.model, request.problem, 'expected', {
+    source: 'other',
+  })) {
     thought += d
   }
 
   let reasoning = ''
   let content = ''
-  for await (const part of streamProblemCode(provider, request.model, request.problem, thought, { source: 'other' })) {
+  for await (const part of streamProblemCode(provider, request.model, request.problem, 'expected', thought, {
+    source: 'other',
+  })) {
     if (part.kind === 'reasoning') reasoning += part.text
     else content += part.text
   }
