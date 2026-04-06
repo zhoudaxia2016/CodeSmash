@@ -8,18 +8,12 @@ import type {
   TestCase,
   TestResult,
 } from '@/types'
-import { currentBattleRound } from '@/utils/battle-round'
+import { currentBattleRound, officialMetrics } from '@/utils/battle-round'
 import { useSandbox } from '@/utils/sandbox'
 
 const FALLBACK_ROUND: ModelRound = {
   phase: 'pending',
   status: 'running',
-}
-
-export function officialMetrics(r: ModelRound) {
-  const o = r.officialResult
-  if (o) return { passed: o.passed, total: o.total }
-  return { passed: 0, total: 0 }
 }
 
 export function activityLabel(r: ModelRound): string {

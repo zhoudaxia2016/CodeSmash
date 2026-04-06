@@ -10,6 +10,7 @@ import {
   roundHasAnalysisContent,
   roundShowsCodePhase,
   roundShowsOfficialPhase,
+  roundTabPassLabels,
   viewRoundForTab,
 } from '@/utils/battle-round'
 import { ModelRoundBar } from './model-round-bar'
@@ -79,6 +80,8 @@ export function Compare({
   const lenB = resultB.result.length
   const tabCountA = battleRoundTabCountForModel(resultA)
   const tabCountB = battleRoundTabCountForModel(resultB)
+  const tabPassLabelsA = roundTabPassLabels(resultA, hookA.displayResult)
+  const tabPassLabelsB = roundTabPassLabels(resultB, hookB.displayResult)
 
   const [roundTabA, setRoundTabA] = useState(() => initialRoundTabIndex(lenA))
   const [roundTabB, setRoundTabB] = useState(() => initialRoundTabIndex(lenB))
@@ -218,6 +221,7 @@ export function Compare({
               <ColumnHeader label={modelAName} hook={hookA} />
               <ModelRoundBar
                 tabCount={tabCountA}
+                tabPassLabels={tabPassLabelsA}
                 selectedIndex={roundTabA}
                 onSelect={setRoundTabA}
                 refine={
@@ -236,6 +240,7 @@ export function Compare({
               <ColumnHeader label={modelBName} hook={hookB} />
               <ModelRoundBar
                 tabCount={tabCountB}
+                tabPassLabels={tabPassLabelsB}
                 selectedIndex={roundTabB}
                 onSelect={setRoundTabB}
                 refine={

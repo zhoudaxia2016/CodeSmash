@@ -3,7 +3,7 @@ import { buildVerifySnippet } from '@/lib/copyTestHarness'
 import type { ModelRound, TestResult } from '@/types'
 import { CopyVerifySnippetButton } from '../copy-verify-snippet-button'
 import { CompactOfficialTiming } from '../timing'
-import { officialMetrics } from '@/hooks/useBattleModelSide'
+import { officialMetrics } from '@/utils/battle-round'
 import {
   OFFICIAL_ACTUAL_OUTPUT_MAX_H,
   PHASE_CARD_INNER_SCROLL,

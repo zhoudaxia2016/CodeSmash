@@ -11,6 +11,8 @@ export type RefineMenuBridge = {
 
 type ModelRoundBarProps = {
   tabCount: number
+  /** 与 tab 一一对应；有官方评测结果时多为 `xx%`，待测为「待测」，失败等为「—」。 */
+  tabPassLabels?: (string | null)[]
   selectedIndex: number
   onSelect: (index: number) => void
   refine: {
@@ -143,16 +145,21 @@ function RefineMenu({
 }
 
 /** 轮次 tab + 追问；sticky 由外层与模型名一起包住（见 Compare）。 */
-export function ModelRoundBar({ tabCount, selectedIndex, onSelect, refine }: ModelRoundBarProps) {
+export function ModelRoundBar({
+  tabCount,
+  tabPassLabels,
+  selectedIndex,
+  onSelect,
+  refine,
+}: ModelRoundBarProps) {
   return (
     <div>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <span className="shrink-0 text-xs font-medium text-muted-foreground">轮次</span>
           <div className="flex flex-wrap gap-1" role="tablist" aria-label="模型轮次">
             {Array.from({ length: tabCount }, (_, i) => {
               const selected = i === selectedIndex
-              const isLatest = i === tabCount - 1
+              const pass = tabPassLabels?.[i] ?? null
               return (
                 <button
                   key={i}
@@ -166,7 +173,8 @@ export function ModelRoundBar({ tabCount, selectedIndex, onSelect, refine }: Mod
                       : 'border-border/80 bg-muted/40 text-muted-foreground hover:bg-muted/70 hover:text-foreground'
                   }`}
                 >
-                  第 {i + 1} 轮{isLatest ? ' · 最新' : ''}
+                  第 {i + 1} 轮
+                  {pass ? ` · ${pass}` : ''}
                 </button>
               )
             })}

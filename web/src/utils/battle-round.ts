@@ -1,5 +1,33 @@
 import type { ModelResult, ModelRound } from '@/types'
 
+export function officialMetrics(r: ModelRound) {
+  const o = r.officialResult
+  if (o) return { passed: o.passed, total: o.total }
+  return { passed: 0, total: 0 }
+}
+
+/** 轮次 tab 上展示的通过率或简短状态；null 表示不附加文案。 */
+export function roundPassRateTabLabel(r: ModelRound | undefined): string | null {
+  if (!r) return null
+  if (r.officialResult) {
+    const { passed, total } = officialMetrics(r)
+    if (total <= 0) return null
+    const pct = Math.round((100 * passed) / total)
+    return `${pct}%`
+  }
+  if (r.phase === 'awaiting_execution') return '待测'
+  if (r.status === 'failed' || r.phase === 'failed') return '—'
+  return null
+}
+
+export function roundTabPassLabels(model: ModelResult, latestMerged: ModelRound): (string | null)[] {
+  const n = battleRoundTabCountForModel(model)
+  return Array.from({ length: n }, (_, i) => {
+    const r = viewRoundForTab(model, i, latestMerged)
+    return roundPassRateTabLabel(r)
+  })
+}
+
 /** 最新轮是否仍可能由模型流式增加分析/代码；进入 awaiting_execution 及之后则不再用该侧内容驱动主区域粘底滚动。 */
 export function latestRoundLlmMayGrow(round: ModelRound | undefined): boolean {
   if (!round) return true
