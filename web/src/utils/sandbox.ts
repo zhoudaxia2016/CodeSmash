@@ -48,6 +48,44 @@ function actualToComparable(raw: unknown): string {
   return String(raw).trim()
 }
 
+/**
+ * quickjs `dump(error)` 常为普通对象；`String(obj)` 会变成 [object Object]。
+ * 优先 JSON；若得到 `{}`（如 Error 不可枚举字段），再列出自有属性。
+ */
+function quickjsDumpToText(raw: unknown): string {
+  if (raw === undefined || raw === null) return String(raw)
+  if (typeof raw !== 'object') return String(raw).trim()
+  const o = raw as object
+  let json: string | undefined
+  try {
+    json = JSON.stringify(o, null, 2)
+  } catch {
+    json = undefined
+  }
+  if (json && json !== '{}') return json
+
+  const parts: string[] = []
+  for (const key of Object.getOwnPropertyNames(o)) {
+    let val: unknown
+    try {
+      val = (o as Record<string, unknown>)[key]
+    } catch {
+      val = undefined
+    }
+    if (val !== undefined && val !== null && typeof val === 'object') {
+      try {
+        parts.push(`${key}: ${JSON.stringify(val)}`)
+      } catch {
+        parts.push(`${key}: [Object]`)
+      }
+    } else {
+      parts.push(`${key}: ${String(val)}`)
+    }
+  }
+  if (parts.length > 0) return parts.join('\n')
+  return json ?? String(o)
+}
+
 function assertSafeIdentifier(name: string): string {
   if (!/^[a-zA-Z_$][\w$]*$/.test(name)) {
     throw new Error(`非法入口名（仅允许标识符）: ${name}`)
@@ -109,7 +147,7 @@ async function evalUserCase(
     if (load.error) {
       let errText = ''
       try {
-        errText = String(vm.dump(load.error))
+        errText = quickjsDumpToText(vm.dump(load.error))
       } catch {
         errText = '（无法读取错误信息）'
       }
@@ -141,7 +179,7 @@ async function evalUserCase(
       if (vload.error) {
         let errText = ''
         try {
-          errText = String(vm.dump(vload.error))
+          errText = quickjsDumpToText(vm.dump(vload.error))
         } catch {
           errText = '（无法读取错误信息）'
         }
@@ -171,7 +209,7 @@ async function evalUserCase(
       if (call.error) {
         let errText = ''
         try {
-          errText = String(vm.dump(call.error))
+          errText = quickjsDumpToText(vm.dump(call.error))
         } catch {
           errText = '（无法读取错误信息）'
         }
@@ -216,7 +254,7 @@ async function evalUserCase(
     if (call.error) {
       let errText = ''
       try {
-        errText = String(vm.dump(call.error))
+        errText = quickjsDumpToText(vm.dump(call.error))
       } catch {
         errText = '（无法读取错误信息）'
       }
@@ -253,7 +291,8 @@ async function evalUserCase(
       timeMs: performance.now() - startTime,
     }
   } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : String(e)
+    const msg =
+      e instanceof Error ? (e.stack ?? e.message) : quickjsDumpToText(e)
     return {
       testCaseId: testCase.id,
       input: inputDisplay,
