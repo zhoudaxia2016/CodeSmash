@@ -1,4 +1,5 @@
 import type { Client } from '@libsql/client'
+import type { BattleLlmProvider } from './modelsRepo.ts'
 
 export type LlmCallSource =
   | 'battle_analysis'
@@ -28,7 +29,7 @@ export type LlmCallLogRow = {
   completed_at: string
   source: LlmCallSource
   source_id: string | null
-  provider: 'minimax' | 'deepseek'
+  provider: BattleLlmProvider
   model: string
   messages: string
   output_json: string | null

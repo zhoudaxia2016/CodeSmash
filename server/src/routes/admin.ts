@@ -1,6 +1,7 @@
 import { Hono } from 'hono'
 import { getLibsqlClient } from '../db/client.ts'
 import {
+  BATTLE_LLM_PROVIDERS,
   deleteModelPermanently,
   getModelById,
   insertModel,
@@ -44,7 +45,7 @@ adminRouter.post('/models', async (c) => {
     return c.json({ error: 'name is required' }, 400)
   }
   if (typeof providerRaw !== 'string' || !isBattleLlmProvider(providerRaw)) {
-    return c.json({ error: 'provider must be minimax or deepseek' }, 400)
+    return c.json({ error: `provider must be one of: ${BATTLE_LLM_PROVIDERS.join(', ')}` }, 400)
   }
 
   const enabled = body.enabled !== false
@@ -88,7 +89,7 @@ adminRouter.patch('/models/:id', async (c) => {
   if (body.enabled !== undefined) patch.enabled = Boolean(body.enabled)
   if (body.provider !== undefined) {
     if (typeof body.provider !== 'string' || !isBattleLlmProvider(body.provider)) {
-      return c.json({ error: 'provider must be minimax or deepseek' }, 400)
+      return c.json({ error: `provider must be one of: ${BATTLE_LLM_PROVIDERS.join(', ')}` }, 400)
     }
     patch.provider = body.provider
   }

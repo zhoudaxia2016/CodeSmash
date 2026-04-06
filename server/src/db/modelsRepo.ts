@@ -1,7 +1,7 @@
 import type { Client } from '@libsql/client'
 import { SEED_MODEL_UUID } from './modelSeedUuids.ts'
 
-export const BATTLE_LLM_PROVIDERS = ['minimax', 'deepseek'] as const
+export const BATTLE_LLM_PROVIDERS = ['minimax', 'deepseek', 'bigmodel'] as const
 export type BattleLlmProvider = (typeof BATTLE_LLM_PROVIDERS)[number]
 
 export type ModelRow = {
@@ -29,6 +29,7 @@ export function isBattleLlmProvider(p: string): p is BattleLlmProvider {
 const SEED_MODELS: Array<Pick<ModelRow, 'id' | 'name' | 'provider'>> = [
   { id: SEED_MODEL_UUID.minimax, name: 'MiniMax-M2.7', provider: 'minimax' },
   { id: SEED_MODEL_UUID.deepseek, name: 'deepseek-chat', provider: 'deepseek' },
+  { id: SEED_MODEL_UUID.bigmodel, name: 'glm-5-turbo', provider: 'bigmodel' },
 ]
 
 export async function seedModelsIfEmpty(client: Client): Promise<void> {

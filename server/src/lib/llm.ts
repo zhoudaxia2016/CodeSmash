@@ -1,4 +1,5 @@
 import { getLibsqlClient } from '../db/client.ts'
+import type { BattleLlmProvider } from '../db/modelsRepo.ts'
 import {
   isLlmDbLogEnabled,
   maxMessagesCharsForDb,
@@ -82,7 +83,7 @@ function logChatPrompts(tag: string, messages: ChatMessage[]) {
   }
 }
 
-const PROVIDERS = {
+const PROVIDERS: Record<BattleLlmProvider, { baseUrl: string; apiKey: string }> = {
   minimax: {
     baseUrl: Deno.env.get('MINIMAX_BASE_URL') || 'https://api.minimaxi.com/v1',
     apiKey: Deno.env.get('MINIMAX_API_KEY') || '',
@@ -91,10 +92,53 @@ const PROVIDERS = {
     baseUrl: Deno.env.get('DEEPSEEK_BASE_URL') || 'https://api.deepseek.com/v1',
     apiKey: Deno.env.get('DEEPSEEK_API_KEY') || '',
   },
-} as const
+  bigmodel: {
+    baseUrl: Deno.env.get('BIGMODEL_BASE_URL') || 'https://open.bigmodel.cn/api/paas/v4',
+    apiKey: Deno.env.get('BIGMODEL_API_KEY') || '',
+  },
+}
+
+function vendorHttpTimeoutMs(): number {
+  const raw = Deno.env.get('VENDOR_HTTP_TIMEOUT_MS')?.trim()
+  if (!raw) return 25_000
+  const n = Number(raw)
+  if (!Number.isFinite(n) || n < 3000) return 25_000
+  return Math.min(Math.floor(n), 120_000)
+}
+
+function vendorFetchSignal(): AbortSignal {
+  return AbortSignal.timeout(vendorHttpTimeoutMs())
+}
+
+function formatVendorFetchFailure(e: unknown): string {
+  if (e instanceof Error && (e.name === 'AbortError' || e.name === 'TimeoutError')) {
+    const s = vendorHttpTimeoutMs() / 1000
+    return `连接厂商超时（${s}s，可由环境变量 VENDOR_HTTP_TIMEOUT_MS 加大）。请检查网络、代理、防火墙与 API 地址是否可达。`
+  }
+  return e instanceof Error ? e.message : String(e)
+}
+
+/** OpenAI-compatible JSON error: `{ "error": { "message": "..." } }` */
+function summarizeVendorErrorBody(raw: string): string {
+  const t = raw.trim()
+  if (!t) return '(empty body)'
+  try {
+    const j = JSON.parse(t) as unknown
+    if (j && typeof j === 'object' && j !== null && 'error' in j) {
+      const err = (j as { error?: unknown }).error
+      if (err && typeof err === 'object' && err !== null && 'message' in err) {
+        const msg = (err as { message?: unknown }).message
+        if (typeof msg === 'string' && msg.trim()) return msg.trim()
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+  return t.length > 280 ? `${t.slice(0, 280)}…` : t
+}
 
 export async function verifyVendorChatModel(
-  provider: 'minimax' | 'deepseek',
+  provider: BattleLlmProvider,
   model: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const config = PROVIDERS[provider]
@@ -107,38 +151,45 @@ export async function verifyVendorChatModel(
   try {
     const response = await fetch(`${config.baseUrl}/chat/completions`, {
       method: 'POST',
+      signal: vendorFetchSignal(),
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${config.apiKey}`,
       },
       body: JSON.stringify({
         model,
-        messages: [{ role: 'user', content: '.' }],
+        messages: [
+          { role: 'system', content: 'You are a helpful assistant.' },
+          { role: 'user', content: '1' },
+        ],
         max_tokens: 1,
         stream: false,
       }),
     })
     if (!response.ok) {
       const t = await response.text()
+      const summary = summarizeVendorErrorBody(t)
       return {
         ok: false,
-        error: `厂商校验失败 (${provider} HTTP ${response.status}): ${t.slice(0, 400)}`,
+        error:
+          `模型名「${model}」在厂商「${provider}」侧不可用（HTTP ${response.status}）：${summary}`,
       }
     }
     return { ok: true }
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : String(e) }
+    return { ok: false, error: formatVendorFetchFailure(e) }
   }
 }
 
 export async function listVendorChatModelIds(
-  provider: 'minimax' | 'deepseek',
+  provider: BattleLlmProvider,
 ): Promise<Set<string> | null> {
   const config = PROVIDERS[provider]
   if (!config.apiKey) return null
   try {
     const base = config.baseUrl.replace(/\/$/, '')
     const response = await fetch(`${base}/models`, {
+      signal: vendorFetchSignal(),
       headers: { Authorization: `Bearer ${config.apiKey}` },
     })
     if (!response.ok) return null
@@ -160,19 +211,45 @@ export async function listVendorChatModelIds(
 }
 
 export async function assertVendorModelNameAllowed(
-  provider: 'minimax' | 'deepseek',
+  provider: BattleLlmProvider,
   name: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  const ids = await listVendorChatModelIds(provider)
-  if (ids) {
-    if (ids.has(name)) return { ok: true }
-    const sample = [...ids].slice(0, 12).join(', ')
+  const trimmed = name.trim()
+  if (!trimmed) {
+    return { ok: false, error: 'model 不能为空' }
+  }
+
+  if (provider === 'deepseek' && /^glm-/i.test(trimmed)) {
     return {
       ok: false,
-      error: `模型名不在厂商列表中（GET …/models）。示例: ${sample}${ids.size > 12 ? ' …' : ''}`,
+      error:
+        `模型名「${trimmed}」是智谱 GLM 的模型 id，与厂商「deepseek」不匹配。请将「厂商」改为 bigmodel（智谱），或改用 DeepSeek 的模型 id（例如 deepseek-chat）。`,
     }
   }
-  return verifyVendorChatModel(provider, name)
+  if (provider === 'bigmodel' && /^deepseek-/i.test(trimmed)) {
+    return {
+      ok: false,
+      error:
+        `模型名「${trimmed}」是 DeepSeek 的模型 id，与厂商「bigmodel」不匹配。请将「厂商」改为 deepseek，或改用智谱开放文档中的模型 id（例如 glm-4.7-flash）。`,
+    }
+  }
+
+  // 智谱 GET /models 常不完整或较慢；直接用 chat/completions 探测，避免后台「新建模型」长时间挂起。
+  const ids =
+    provider === 'bigmodel' ? null : await listVendorChatModelIds(provider)
+  if (ids?.has(trimmed)) return { ok: true }
+
+  const probe = await verifyVendorChatModel(provider, trimmed)
+  if (probe.ok) return { ok: true }
+
+  if (ids && ids.size > 0) {
+    const sample = [...ids].slice(0, 24).join('、')
+    return {
+      ok: false,
+      error: `${probe.error}。该 Key 在 GET /models 中列出的模型 id：${sample}${ids.size > 24 ? '…' : ''}`,
+    }
+  }
+  return probe
 }
 
 /** One SSE `delta` slice before merging into `LlmCallOutputJson`. */
@@ -261,7 +338,7 @@ function messageToLlmCallOutputJson(msg: unknown): LlmCallOutputJson {
 }
 
 async function* streamChatParts(
-  provider: 'minimax' | 'deepseek',
+  provider: BattleLlmProvider,
   model: string,
   messages: ChatMessage[],
   options: StreamLlmOptions,
@@ -600,7 +677,7 @@ export function buildBattleClosedRoundsHistoryMessages(
 }
 
 export async function* streamBattleRefineAnalysis(
-  provider: 'minimax' | 'deepseek',
+  provider: BattleLlmProvider,
   model: string,
   historyThroughLastCodeAssistant: ChatMessage[],
   officialPlusRefineUserContent: string,
@@ -621,7 +698,7 @@ export async function* streamBattleRefineAnalysis(
 }
 
 export async function* streamBattleRefineCode(
-  provider: 'minimax' | 'deepseek',
+  provider: BattleLlmProvider,
   model: string,
   problem: ProblemPayload,
   historyThroughLastCodeAssistant: ChatMessage[],
@@ -642,7 +719,7 @@ export async function* streamBattleRefineCode(
 }
 
 export async function* streamProblemAnalysis(
-  provider: 'minimax' | 'deepseek',
+  provider: BattleLlmProvider,
   model: string,
   problem: ProblemPayload,
   gradingMode: 'expected' | 'verify',
@@ -666,7 +743,7 @@ export async function* streamProblemAnalysis(
  * 首条 `user` 与 `streamProblemAnalysis` 中**完全一致**（含 verify 说明），接着是上一步的 `assistant`，再接写代码指令。
  */
 export async function* streamProblemCode(
-  provider: 'minimax' | 'deepseek',
+  provider: BattleLlmProvider,
   model: string,
   problem: ProblemPayload,
   gradingMode: 'expected' | 'verify',
@@ -742,7 +819,7 @@ export function prepareRunnableJavaScript(text: string): string {
   return finalizeRunnableFromCodeOnly(code)
 }
 
-export async function callLLM(provider: 'minimax' | 'deepseek', request: LLMRequest): Promise<LLMResponse> {
+export async function callLLM(provider: BattleLlmProvider, request: LLMRequest): Promise<LLMResponse> {
   if (!request.problem) {
     throw new Error('callLLM requires problem payload for this API')
   }
@@ -815,7 +892,7 @@ function extractCompletionMessageContent(json: unknown): string {
 }
 
 async function chatCompletionContent(
-  provider: 'minimax' | 'deepseek',
+  provider: BattleLlmProvider,
   model: string,
   messages: ChatMessage[],
   options: StreamLlmOptions,
@@ -1107,7 +1184,7 @@ function buildProblemAuthoringUserContent(input: {
 }
 
 export async function generateProblemAuthoring(
-  provider: 'minimax' | 'deepseek',
+  provider: BattleLlmProvider,
   model: string,
   input: {
     title?: string

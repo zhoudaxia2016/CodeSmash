@@ -42,7 +42,7 @@ export function Admin({ tab }: Props) {
   const deleteModel = useDeleteAdminModel()
 
   const [newName, setNewName] = useState('')
-  const [newProvider, setNewProvider] = useState<'minimax' | 'deepseek'>('deepseek')
+  const [newProvider, setNewProvider] = useState<'minimax' | 'deepseek' | 'bigmodel'>('deepseek')
 
   const handleCreate = (e: FormEvent) => {
     e.preventDefault()
@@ -84,7 +84,7 @@ export function Admin({ tab }: Props) {
               <span className="text-xs text-muted-foreground">厂商</span>
               <Select
                 value={newProvider}
-                onValueChange={(v) => setNewProvider(v as 'minimax' | 'deepseek')}
+                onValueChange={(v) => setNewProvider(v as 'minimax' | 'deepseek' | 'bigmodel')}
               >
                 <SelectTrigger className="h-9 w-[9rem]">
                   <SelectValue />
@@ -92,6 +92,7 @@ export function Admin({ tab }: Props) {
                 <SelectContent>
                   <SelectItem value="deepseek">deepseek</SelectItem>
                   <SelectItem value="minimax">minimax</SelectItem>
+                  <SelectItem value="bigmodel">bigmodel（智谱）</SelectItem>
                 </SelectContent>
               </Select>
             </div>
