@@ -142,10 +142,10 @@ function RefineMenu({
   )
 }
 
-/** Per-column sticky round tabs; optional refine control on the right. */
+/** 轮次 tab + 追问；sticky 由外层与模型名一起包住（见 Compare）。 */
 export function ModelRoundBar({ tabCount, selectedIndex, onSelect, refine }: ModelRoundBarProps) {
   return (
-    <div className="sticky top-0 z-30 border-b border-border/80 bg-background/95 py-2 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/85">
+    <div>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <span className="shrink-0 text-xs font-medium text-muted-foreground">轮次</span>

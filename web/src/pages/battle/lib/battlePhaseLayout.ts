@@ -13,3 +13,6 @@ export const PHASE_PAIR_GRID =
 export const CODE_BLOCK_INNER = 'rounded-md bg-muted/20 p-3 overflow-x-auto'
 
 export const MAIN_STICK_NEAR_PX = 80
+
+/** 评测结果表里「实际」列过长（如堆栈）时限制高度，避免撑满整页 */
+export const OFFICIAL_ACTUAL_OUTPUT_MAX_H = 'max-h-48'

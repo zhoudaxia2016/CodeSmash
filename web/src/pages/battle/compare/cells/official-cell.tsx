@@ -4,7 +4,11 @@ import type { ModelRound, TestResult } from '@/types'
 import { CopyVerifySnippetButton } from '../copy-verify-snippet-button'
 import { CompactOfficialTiming } from '../timing'
 import { officialMetrics } from '@/hooks/useBattleModelSide'
-import { PHASE_CARD_INNER_SCROLL, PHASE_CARD_OUTER } from '../../lib/battlePhaseLayout'
+import {
+  OFFICIAL_ACTUAL_OUTPUT_MAX_H,
+  PHASE_CARD_INNER_SCROLL,
+  PHASE_CARD_OUTER,
+} from '../../lib/battlePhaseLayout'
 import type { ModelSideHook } from '../../lib/battleTypes'
 
 const OFFICIAL_RESULTS_TABLE_MIN_PX = 520
@@ -103,8 +107,12 @@ function OfficialResultTableBlock({
                         <td className="break-all px-2 py-1.5 font-mono text-foreground">
                           {row.expectedOutput}
                         </td>
-                        <td className="break-all px-2 py-1.5 font-mono text-foreground">
-                          {row.actualOutput}
+                        <td className="align-top px-2 py-1.5">
+                          <div
+                            className={`${OFFICIAL_ACTUAL_OUTPUT_MAX_H} overflow-y-auto break-all font-mono text-foreground whitespace-pre-wrap`}
+                          >
+                            {row.actualOutput}
+                          </div>
                         </td>
                         <td className="px-2 py-1.5">
                           {row.passed ? (
@@ -175,7 +183,9 @@ function OfficialResultTableBlock({
                       </div>
                       <div className="min-w-0 space-y-0.5">
                         <div className="text-[11px] font-medium text-muted-foreground">实际</div>
-                        <div className="break-words break-all font-mono text-foreground">
+                        <div
+                          className={`${OFFICIAL_ACTUAL_OUTPUT_MAX_H} overflow-y-auto break-words break-all font-mono text-foreground whitespace-pre-wrap`}
+                        >
                           {row.actualOutput}
                         </div>
                       </div>
