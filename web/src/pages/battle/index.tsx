@@ -89,6 +89,8 @@ export function Battle({
     return Array.from(s).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }))
   }, [problems])
 
+  const selectableModels = useMemo(() => models.filter((m) => m.enabled), [models])
+
   const [headerSlotEl, setHeaderSlotEl] = useState<HTMLElement | null>(null)
 
   useLayoutEffect(() => {
@@ -197,13 +199,28 @@ export function Battle({
   }, [openBattleDetailId, currentUser?.id, queryClient])
 
   useEffect(() => {
-    if (models.length > 0) {
-      if (!modelA) setModelA(models[0].id)
-      if (!modelB) setModelB(models[1]?.id || models[0].id)
+    if (selectableModels.length === 0) return
+    if (!modelA || !selectableModels.some((m) => m.id === modelA)) {
+      setModelA(selectableModels[0].id)
     }
-  }, [models, modelA, modelB])
+  }, [selectableModels, modelA])
 
-  const canStart = selectedProblem && modelA && modelB
+  useEffect(() => {
+    if (selectableModels.length === 0) return
+    const a = modelA || selectableModels[0].id
+    if (!modelB || !selectableModels.some((m) => m.id === modelB) || modelB === a) {
+      const alt = selectableModels.find((m) => m.id !== a)
+      setModelB(alt?.id ?? selectableModels[0].id)
+    }
+  }, [selectableModels, modelB, modelA])
+
+  const canStart =
+    !!selectedProblem &&
+    !!modelA &&
+    !!modelB &&
+    modelA !== modelB &&
+    selectableModels.some((m) => m.id === modelA) &&
+    selectableModels.some((m) => m.id === modelB)
   const modelAName = models.find((m) => m.id === modelA)?.name || 'Model A'
   const modelBName = models.find((m) => m.id === modelB)?.name || 'Model B'
 
@@ -252,7 +269,7 @@ export function Battle({
             <SelectValue placeholder="Model A" />
           </SelectTrigger>
           <SelectContent>
-            {models.map((m) => (
+            {selectableModels.map((m) => (
               <SelectItem key={m.id} value={m.id}>
                 {m.name}
               </SelectItem>
@@ -267,7 +284,7 @@ export function Battle({
             <SelectValue placeholder="Model B" />
           </SelectTrigger>
           <SelectContent>
-            {models.map((m) => (
+            {selectableModels.map((m) => (
               <SelectItem key={m.id} value={m.id}>
                 {m.name}
               </SelectItem>
@@ -294,11 +311,11 @@ export function Battle({
           variant="secondary"
           size="sm"
           className="shrink-0"
-          disabled={models.length === 0 || !currentUser}
+          disabled={selectableModels.length === 0 || !currentUser}
           title={
             !currentUser
               ? '请使用 GitHub 登录后创建题目'
-              : models.length === 0
+              : selectableModels.length === 0
                 ? '需至少一个可用模型以使用命题辅助'
                 : undefined
           }
@@ -365,8 +382,8 @@ export function Battle({
       <NewProblem
         open={newProblemOpen}
         onOpenChange={setNewProblemOpen}
-        models={models}
-        defaultModelId={defaultAuthoringModelId(models)}
+        models={selectableModels.length > 0 ? selectableModels : models}
+        defaultModelId={defaultAuthoringModelId(selectableModels.length > 0 ? selectableModels : models)}
         tagSuggestions={problemTagCatalog}
         onCreated={(id) => {
           setSelectedProblem(id)
@@ -388,8 +405,8 @@ export function Battle({
           loading={detailLoading}
           loadFailed={detailFailed}
           problemSummary={selectedProblemRow}
-          models={models}
-          defaultModelId={defaultAuthoringModelId(models)}
+          models={selectableModels.length > 0 ? selectableModels : models}
+          defaultModelId={defaultAuthoringModelId(selectableModels.length > 0 ? selectableModels : models)}
           tagSuggestions={problemTagCatalog}
           onConfirm={async (
             args: Parameters<NonNullable<ProblemEditorProps['onConfirm']>>[0],

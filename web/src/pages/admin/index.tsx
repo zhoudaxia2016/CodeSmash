@@ -48,14 +48,40 @@ export function Admin({ tab, onTabChange }: Props) {
       </nav>
       <div className="min-w-0 flex-1 rounded-lg border border-border/80 bg-muted/10 p-6">
         {tab === 'models' && (
-          <div className="space-y-2">
+          <div className="space-y-4">
             <h2 className="text-sm font-semibold text-foreground">模型管理</h2>
+            <p className="text-sm text-muted-foreground">
+              新建、启用与禁用模型请在侧边栏「排行榜」页面操作（需管理员权限）。
+            </p>
             {modelsQ.isLoading && <p className="text-sm text-muted-foreground">加载中…</p>}
             {modelsQ.isError && (
               <p className="text-sm text-destructive">{(modelsQ.error as Error).message}</p>
             )}
             {modelsQ.isSuccess && (
-              <p className="text-sm text-muted-foreground">{modelsQ.data.message}</p>
+              <div className="overflow-x-auto rounded-md border border-border/80 bg-background/50">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-border/80 text-left">
+                      <th className="px-3 py-2 font-medium">ID</th>
+                      <th className="px-3 py-2 font-medium">名称</th>
+                      <th className="px-3 py-2 font-medium">厂商</th>
+                      <th className="px-3 py-2 font-medium">状态</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {modelsQ.data.models.map((m) => (
+                      <tr key={m.id} className="border-b border-border/60 last:border-0">
+                        <td className="px-3 py-2 font-mono text-xs">{m.id}</td>
+                        <td className="px-3 py-2">{m.name}</td>
+                        <td className="px-3 py-2">{m.provider}</td>
+                        <td className="px-3 py-2">
+                          {m.enabled ? '启用' : '已禁用'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
           </div>
         )}

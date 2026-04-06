@@ -1,51 +1,91 @@
 import { Hono } from 'hono'
+import { getCookie } from 'hono/cookie'
+import { getLibsqlClient } from '../db/client.ts'
+import { listBattlePayloadsForLeaderboard } from '../db/battleResultsRepo.ts'
+import { aggregateLeaderboardFromPayloads } from '../lib/leaderboardAggregate.ts'
+import { listModels } from '../db/modelsRepo.ts'
+import { findUserBySessionId } from '../db/userSessionsRepo.ts'
+import { SESSION_COOKIE } from '../middleware/requireAuth.ts'
 
 const leaderboardRouter = new Hono()
 
-const leaderboardEntries = [
-  {
-    modelId: 'gpt-4o',
-    modelName: 'GPT-4o',
-    problemId: undefined,
-    global: true,
-    passRate: 0.87,
-    avgTimeMs: 42,
-    battleCount: 156,
-    selfTestQuality: 0.82,
-  },
-  {
-    modelId: 'claude-sonnet-4',
-    modelName: 'Claude Sonnet 4',
-    problemId: undefined,
-    global: true,
-    passRate: 0.91,
-    avgTimeMs: 38,
-    battleCount: 142,
-    selfTestQuality: 0.88,
-  },
-  {
-    modelId: 'gemini-2.0-flash',
-    modelName: 'Gemini 2.0 Flash',
-    problemId: undefined,
-    global: true,
-    passRate: 0.85,
-    avgTimeMs: 28,
-    battleCount: 98,
-    selfTestQuality: 0.75,
-  },
-]
+leaderboardRouter.get('/', async (c) => {
+  const problemIdRaw = c.req.query('problemId')
+  const problemId = problemIdRaw && problemIdRaw.length > 0 ? problemIdRaw : undefined
+  const scope = c.req.query('scope') === 'mine' ? 'mine' : 'all'
 
-leaderboardRouter.get('/', (c) => {
-  const problemId = c.req.query('problemId')
-
-  let entries = leaderboardEntries
-  if (problemId) {
-    entries = entries.map((e) => ({ ...e, problemId, global: false }))
+  let userId: string | undefined
+  if (scope === 'mine') {
+    const sid = getCookie(c, SESSION_COOKIE)
+    if (!sid) {
+      return c.json({ error: 'Unauthorized', message: '请先登录' }, 401)
+    }
+    const client = getLibsqlClient()
+    const user = await findUserBySessionId(client, sid)
+    if (!user) {
+      return c.json({ error: 'Unauthorized', message: '会话已过期，请重新登录' }, 401)
+    }
+    userId = user.id
   }
 
-  const sorted = [...entries].sort((a, b) => b.passRate - a.passRate)
+  const client = getLibsqlClient()
+  const battleRows = await listBattlePayloadsForLeaderboard(client, { userId, problemId })
+  const agg = aggregateLeaderboardFromPayloads(battleRows)
+  const models = await listModels(client, { enabledOnly: true })
+  const global = !problemId
 
-  return c.json({ entries: sorted })
+  type Entry = {
+    modelId: string
+    modelName: string
+    problemId?: string
+    global: boolean
+    passRate: number
+    avgTimeMs: number
+    battleCount: number
+    selfTestQuality: number
+  }
+
+  const entries: Entry[] = models.map((m) => {
+    const a = agg.get(m.id)
+    const passRate = a && a.totalSum > 0 ? a.passedSum / a.totalSum : 0
+    const battleCount = a?.battles ?? 0
+    const avgTimeMs = a && a.timeN > 0 ? a.timeSum / a.timeN : 0
+    const selfTestQuality = a && a.selfN > 0 ? a.selfSum / a.selfN : 0
+    return {
+      modelId: m.id,
+      modelName: m.name,
+      problemId: global ? undefined : problemId,
+      global,
+      passRate,
+      avgTimeMs: Math.round(avgTimeMs),
+      battleCount,
+      selfTestQuality,
+    }
+  })
+
+  const known = new Set(models.map((m) => m.id))
+  for (const [id, a] of agg) {
+    if (known.has(id)) continue
+    const passRate = a.totalSum > 0 ? a.passedSum / a.totalSum : 0
+    entries.push({
+      modelId: id,
+      modelName: id,
+      problemId: global ? undefined : problemId,
+      global,
+      passRate,
+      avgTimeMs: Math.round(a.timeN > 0 ? a.timeSum / a.timeN : 0),
+      battleCount: a.battles,
+      selfTestQuality: a.selfN > 0 ? a.selfSum / a.selfN : 0,
+    })
+  }
+
+  entries.sort((x, y) => {
+    if (y.passRate !== x.passRate) return y.passRate - x.passRate
+    if (x.avgTimeMs !== y.avgTimeMs) return x.avgTimeMs - y.avgTimeMs
+    return y.battleCount - x.battleCount
+  })
+
+  return c.json({ entries })
 })
 
 export { leaderboardRouter }

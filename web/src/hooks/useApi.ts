@@ -159,10 +159,12 @@ export function useBattle(battleId: string) {
   })
 }
 
-export function useLeaderboard(problemId?: string) {
+export function useLeaderboard(opts?: { problemId?: string; scope?: 'all' | 'mine' }) {
+  const problemId = opts?.problemId
+  const scope = opts?.scope ?? 'all'
   return useQuery({
-    queryKey: ['leaderboard', problemId],
-    queryFn: () => api.getLeaderboard(problemId),
+    queryKey: ['leaderboard', problemId ?? '', scope],
+    queryFn: () => api.getLeaderboard({ problemId, scope }),
   })
 }
 
@@ -190,6 +192,52 @@ export function useSyncBattleToCloud() {
     mutationFn: (battle: BattleSession) => api.postBattleResult(battle),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['battle-results'] })
+      void queryClient.invalidateQueries({ queryKey: ['leaderboard'] })
+    },
+  })
+}
+
+export function useAdminModels(enabled: boolean) {
+  return useQuery({
+    queryKey: ['admin', 'models'],
+    queryFn: () => api.getAdminModels(),
+    enabled,
+  })
+}
+
+export function useCreateAdminModel() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (body: Parameters<typeof api.createAdminModel>[0]) => api.createAdminModel(body),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['admin', 'models'] })
+      void queryClient.invalidateQueries({ queryKey: ['models'] })
+      void queryClient.invalidateQueries({ queryKey: ['leaderboard'] })
+    },
+  })
+}
+
+export function usePatchAdminModel() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, patch }: { id: string; patch: Parameters<typeof api.patchAdminModel>[1] }) =>
+      api.patchAdminModel(id, patch),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['admin', 'models'] })
+      void queryClient.invalidateQueries({ queryKey: ['models'] })
+      void queryClient.invalidateQueries({ queryKey: ['leaderboard'] })
+    },
+  })
+}
+
+export function useDeleteAdminModel() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => api.deleteAdminModel(id),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['admin', 'models'] })
+      void queryClient.invalidateQueries({ queryKey: ['models'] })
+      void queryClient.invalidateQueries({ queryKey: ['leaderboard'] })
     },
   })
 }

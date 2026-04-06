@@ -1,4 +1,4 @@
-import type { AuthUser, RateLimitInfo } from '../types'
+import type { AdminPlatformModel, AuthUser, RateLimitInfo } from '../types'
 
 const rawApiOrigin =
   import.meta.env.VITE_API_URL?.trim().replace(/\/$/, '') ?? ''
@@ -74,8 +74,49 @@ export const api = {
     return handleResponse(res)
   },
 
-  async getAdminModels(): Promise<{ message: string; items: unknown[] }> {
+  async getAdminModels(): Promise<{ models: AdminPlatformModel[] }> {
     const res = await apiFetch(`${API_BASE}/admin/models`)
+    return handleResponse(res)
+  },
+
+  async createAdminModel(body: {
+    id: string
+    name: string
+    description?: string
+    provider: string
+    enabled?: boolean
+    sortOrder?: number
+  }): Promise<{ model: AdminPlatformModel }> {
+    const res = await apiFetch(`${API_BASE}/admin/models`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+    return handleResponse(res)
+  },
+
+  async patchAdminModel(
+    id: string,
+    patch: Partial<{
+      name: string
+      description: string
+      provider: string
+      enabled: boolean
+      sortOrder: number
+    }>,
+  ): Promise<{ model: AdminPlatformModel }> {
+    const res = await apiFetch(`${API_BASE}/admin/models/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(patch),
+    })
+    return handleResponse(res)
+  },
+
+  async deleteAdminModel(id: string): Promise<{ ok: boolean }> {
+    const res = await apiFetch(`${API_BASE}/admin/models/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    })
     return handleResponse(res)
   },
 
@@ -243,9 +284,15 @@ export const api = {
     return handleResponse(res)
   },
 
-  async getLeaderboard(problemId?: string): Promise<{ entries: import('../types').LeaderboardEntry[] }> {
-    const url = problemId ? `${API_BASE}/leaderboard?problemId=${problemId}` : `${API_BASE}/leaderboard`
-    const res = await apiFetch(url)
+  async getLeaderboard(params?: {
+    problemId?: string
+    scope?: 'all' | 'mine'
+  }): Promise<{ entries: import('../types').LeaderboardEntry[] }> {
+    const q = new URLSearchParams()
+    if (params?.problemId) q.set('problemId', params.problemId)
+    if (params?.scope === 'mine') q.set('scope', 'mine')
+    const qs = q.toString()
+    const res = await apiFetch(`${API_BASE}/leaderboard${qs ? `?${qs}` : ''}`)
     return handleResponse(res)
   },
 

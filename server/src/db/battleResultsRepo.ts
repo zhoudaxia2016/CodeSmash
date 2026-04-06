@@ -88,6 +88,34 @@ export async function deleteBattleResultForUser(
   return (res.rowsAffected ?? 0) > 0
 }
 
+export async function listBattlePayloadsForLeaderboard(
+  client: Client,
+  filter: { userId?: string; problemId?: string },
+): Promise<Array<{ problemId: string; payloadJson: string }>> {
+  const cond: string[] = []
+  const args: string[] = []
+  if (filter.userId) {
+    cond.push('created_by = ?')
+    args.push(filter.userId)
+  }
+  if (filter.problemId) {
+    cond.push('problem_id = ?')
+    args.push(filter.problemId)
+  }
+  const where = cond.length > 0 ? `WHERE ${cond.join(' AND ')}` : ''
+  const res = await client.execute({
+    sql: `SELECT problem_id, payload_json FROM battle_results ${where}`,
+    args,
+  })
+  return res.rows.map((row) => {
+    const r = row as Record<string, unknown>
+    return {
+      problemId: String(r.problem_id),
+      payloadJson: String(r.payload_json),
+    }
+  })
+}
+
 export async function upsertBattleResult(
   client: Client,
   input: {

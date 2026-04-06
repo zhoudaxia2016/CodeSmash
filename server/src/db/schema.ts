@@ -1,6 +1,7 @@
 import type { Client } from '@libsql/client'
 import { migrateExpectedAnsJsonValue } from '../lib/expectedAnsAlternatives.ts'
 import { getLibsqlClient } from './client.ts'
+import { seedModelsIfEmpty } from './modelsRepo.ts'
 import { ensureOfficialTestCasesPresent, seedProblemsIfEmpty } from './problemsRepo.ts'
 
 /** Older DBs may still have difficulty; UGC 场景用 tags 表达即可（SQLite 3.35+）。 */
@@ -279,6 +280,18 @@ export async function initDb(): Promise<void> {
   ON problem_test_cases (problem_id)`,
         args: [],
       },
+      {
+        sql: `CREATE TABLE IF NOT EXISTS models (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  provider TEXT NOT NULL,
+  enabled INTEGER NOT NULL DEFAULT 1,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL
+)`,
+        args: [],
+      },
     ],
     'write',
   )
@@ -290,6 +303,7 @@ export async function initDb(): Promise<void> {
   await migrateLlmCallLogsDropOutputText(client)
   await migrateAddProblemsCreatedBy(client)
 
+  await seedModelsIfEmpty(client)
   await seedProblemsIfEmpty(client)
   await ensureOfficialTestCasesPresent(client)
   await migrateExpectedAnsToAlternativesArray(client)

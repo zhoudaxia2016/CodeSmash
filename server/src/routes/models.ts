@@ -1,48 +1,34 @@
 import { Hono } from 'hono'
+import { getLibsqlClient } from '../db/client.ts'
+import { getModelById, listModels } from '../db/modelsRepo.ts'
 
 const modelsRouter = new Hono()
 
-type Model = {
-  id: string
-  name: string
-  description: string
-  provider: string
-  enabled: boolean
+function toApiModel(m: Awaited<ReturnType<typeof listModels>>[number]) {
+  return {
+    id: m.id,
+    name: m.name,
+    description: m.description || undefined,
+    provider: m.provider,
+    enabled: m.enabled,
+  }
 }
 
-const platformModels: Model[] = [
-  {
-    id: 'minimax-2.7',
-    name: 'MiniMax 2.7',
-    description: 'MiniMax 最新编程模型，代码能力强',
-    provider: 'minimax',
-    enabled: true,
-  },
-  {
-    id: 'deepseek-v3',
-    name: 'DeepSeek V3',
-    description: 'DeepSeek 最新模型',
-    provider: 'deepseek',
-    enabled: true,
-  },
-]
-
-modelsRouter.get('/', (c) => {
+modelsRouter.get('/', async (c) => {
+  const client = getLibsqlClient()
   const enabled = c.req.query('enabled')
-  let models = platformModels
-  if (enabled === 'true') {
-    models = models.filter((m) => m.enabled)
-  }
-  return c.json({ models })
+  const rows = await listModels(client, { enabledOnly: enabled === 'true' })
+  return c.json({ models: rows.map(toApiModel) })
 })
 
-modelsRouter.get('/:id', (c) => {
+modelsRouter.get('/:id', async (c) => {
   const id = c.req.param('id')
-  const model = platformModels.find((m) => m.id === id)
+  const client = getLibsqlClient()
+  const model = await getModelById(client, id)
   if (!model) {
     return c.json({ error: 'Model not found' }, 404)
   }
-  return c.json({ model })
+  return c.json({ model: toApiModel(model) })
 })
 
 export { modelsRouter }

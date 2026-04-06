@@ -17,6 +17,7 @@ import {
 } from '../lib/codePhaseSplit.ts'
 import { getLibsqlClient } from '../db/client.ts'
 import { getBattleResultPayloadRowForUser } from '../db/battleResultsRepo.ts'
+import { getProviderForEnabledModel, type BattleLlmProvider } from '../db/modelsRepo.ts'
 import type { SessionUser } from '../db/userSessionsRepo.ts'
 import { getSessionUser, requireAuth } from '../middleware/requireAuth.ts'
 import { loadProblemForBattle } from './problems.ts'
@@ -219,11 +220,6 @@ function battleSessionPayloadToBattle(json: unknown): Battle | null {
   }
 }
 
-function getModelProvider(modelId: string): 'minimax' | 'deepseek' {
-  if (modelId.startsWith('minimax')) return 'minimax'
-  return 'deepseek'
-}
-
 function problemPayload(p: ProblemRecord) {
   return {
     title: p.title,
@@ -299,7 +295,7 @@ async function runSide(
   side: 'A' | 'B',
   problem: BattleProblem,
   modelId: string,
-  provider: ReturnType<typeof getModelProvider>,
+  provider: BattleLlmProvider,
 ) {
   const key = side === 'A' ? 'modelAResult' : 'modelBResult'
   const llmLog = `[battle=${battleId} side=${side} model=${modelId}]`
@@ -407,7 +403,7 @@ async function runRefineSide(
   side: 'A' | 'B',
   problem: BattleProblem,
   modelId: string,
-  provider: ReturnType<typeof getModelProvider>,
+  provider: BattleLlmProvider,
   priorClosedRounds: BattleRound[],
   refineOpts: { userMessage: string; includeFailedCases: boolean },
 ) {
@@ -520,7 +516,13 @@ async function runRefineSide(
   activeBattles.set(battleId, battle)
 }
 
-async function runBattle(battleId: string, battle: Battle, problem: BattleProblem) {
+async function runBattle(
+  battleId: string,
+  battle: Battle,
+  problem: BattleProblem,
+  providerA: BattleLlmProvider,
+  providerB: BattleLlmProvider,
+) {
   battle.status = 'running'
   activeBattles.set(battleId, battle)
 
@@ -532,8 +534,8 @@ async function runBattle(battleId: string, battle: Battle, problem: BattleProble
   )
 
   await Promise.all([
-    runSide(battleId, battle, 'A', problem, battle.modelAId, getModelProvider(battle.modelAId)),
-    runSide(battleId, battle, 'B', problem, battle.modelBId, getModelProvider(battle.modelBId)),
+    runSide(battleId, battle, 'A', problem, battle.modelAId, providerA),
+    runSide(battleId, battle, 'B', problem, battle.modelBId, providerB),
   ])
 
   console.log(`[battle ${battleId}] both sides finished LLM pipeline -> status awaiting_client`)
@@ -597,6 +599,13 @@ battlesRouter.post('/', async (c) => {
     return c.json({ error: 'Problem not found' }, 404)
   }
 
+  const dbClient = getLibsqlClient()
+  const providerA = await getProviderForEnabledModel(dbClient, modelAId)
+  const providerB = await getProviderForEnabledModel(dbClient, modelBId)
+  if (!providerA || !providerB) {
+    return c.json({ error: 'Invalid or disabled model' }, 400)
+  }
+
   const battleId = crypto.randomUUID()
   const battle: Battle = {
     id: battleId,
@@ -616,7 +625,7 @@ battlesRouter.post('/', async (c) => {
     `[battle ${battleId}] POST accepted problem=${problemId} modelA=${modelAId} modelB=${modelBId} -> background runBattle`,
   )
 
-  void runBattle(battleId, battle, problem)
+  void runBattle(battleId, battle, problem, providerA, providerB)
 
   return c.json({ battle }, 201)
 })
@@ -682,13 +691,19 @@ battlesRouter.post('/:id/refine', async (c) => {
 
   activeBattles.set(id, battle)
 
+  const dbClient = getLibsqlClient()
+  const provider = await getProviderForEnabledModel(dbClient, modelId)
+  if (!provider) {
+    return c.json({ error: 'Invalid or disabled model' }, 400)
+  }
+
   void runRefineSide(
     id,
     battle,
     body.side === 'modelA' ? 'A' : 'B',
     problem,
     modelId,
-    getModelProvider(modelId),
+    provider,
     priorClosedRounds,
     refineOpts,
   )

@@ -8,6 +8,7 @@ import { authRouter } from './routes/auth.ts'
 import { battleResultsRouter } from './routes/battleResults.ts'
 import { battlesRouter } from './routes/battles.ts'
 import { problemsRouter } from './routes/problems.ts'
+import { leaderboardRouter } from './routes/leaderboard.ts'
 import { modelsRouter } from './routes/models.ts'
 
 await initDb()
@@ -29,10 +30,7 @@ api.route('/battle-results', battleResultsRouter)
 api.route('/battles', battlesRouter)
 api.route('/problems', problemsRouter)
 api.route('/models', modelsRouter)
-
-api.get('/leaderboard', (c) => {
-  return c.json({ leaderboard: [] })
-})
+api.route('/leaderboard', leaderboardRouter)
 
 app.route('/api', api)
 
