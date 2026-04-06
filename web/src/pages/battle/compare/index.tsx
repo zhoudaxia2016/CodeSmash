@@ -22,6 +22,7 @@ import {
   PhaseColumnHeading,
   PhasePairedPlaceholder,
 } from './phase-chrome'
+import { PHASE_PAIR_GRID } from '../lib/battlePhaseLayout'
 
 export type CompareProps = {
   battleId: string
@@ -207,13 +208,13 @@ export function Compare({
         runDoneB={hookB.runProgress?.done}
       />
       {/*
-        每侧一列纵向排布，sticky 父级须包含该侧全部可滚内容；若 sticky 只在「仅含头部」的短容器里，
-        父高≈头高，CSS sticky 无法相对 main 吸顶。
+        阶段区恢复 PHASE_PAIR_GRID，保证左右同阶段等高对齐。
+        模型名+轮次放在「包住下方所有阶段」的单一 sticky 顶栏里，父级够高，才能相对 main 吸顶。
       */}
       <div className="flex min-h-0 min-w-0 flex-col gap-4">
-        <div className="grid min-h-0 grid-cols-1 gap-x-6 gap-y-10 sm:grid-cols-2 sm:items-start">
-          <div className="flex min-h-0 min-w-0 flex-col gap-4">
-            <div className="sticky top-0 z-30 space-y-2 border-b border-border/80 bg-background/95 py-2 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/85">
+        <div className="sticky top-0 z-30 border-b border-border/80 bg-background/95 py-2 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/85">
+          <div className={PHASE_PAIR_GRID}>
+            <div className="min-w-0 space-y-2">
               <ColumnHeader label={modelAName} hook={hookA} />
               <ModelRoundBar
                 tabCount={tabCountA}
@@ -231,45 +232,7 @@ export function Compare({
                 }
               />
             </div>
-            {showAnalysisSection && (
-              <section className="flex min-h-0 min-w-0 flex-col gap-2">
-                <PhaseColumnHeading>1 · 分析</PhaseColumnHeading>
-                <AnalysisCell battleId={battleId} viewRound={viewA} isViewingLatest={latestA} />
-              </section>
-            )}
-            {showCodeSection && (
-              <section className="flex min-h-0 min-w-0 flex-col gap-2">
-                <PhaseColumnHeading>2 · 代码</PhaseColumnHeading>
-                {roundShowsCodePhase(viewA) ? (
-                  <CodeCell
-                    battleId={battleId}
-                    viewRound={viewA}
-                    isViewingLatest={latestA}
-                    previousComparableCode={prevCodeA || undefined}
-                  />
-                ) : (
-                  <PhasePairedPlaceholder>
-                    {viewA === undefined ? '该模型尚无这一轮输出。' : '等待分析完成…'}
-                  </PhasePairedPlaceholder>
-                )}
-              </section>
-            )}
-            {showOfficialSection && (
-              <section className="flex min-h-0 min-w-0 flex-col gap-2">
-                <PhaseColumnHeading>3 · 执行测试</PhaseColumnHeading>
-                {roundShowsOfficialPhase(viewA) ? (
-                  <OfficialCell hook={hookA} viewRound={viewA} isViewingLatest={latestA} />
-                ) : (
-                  <PhasePairedPlaceholder>
-                    {viewA === undefined ? '该模型尚无这一轮输出。' : '等待代码阶段完成…'}
-                  </PhasePairedPlaceholder>
-                )}
-              </section>
-            )}
-          </div>
-
-          <div className="flex min-h-0 min-w-0 flex-col gap-4">
-            <div className="sticky top-0 z-30 space-y-2 border-b border-border/80 bg-background/95 py-2 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/85">
+            <div className="min-w-0 space-y-2">
               <ColumnHeader label={modelBName} hook={hookB} />
               <ModelRoundBar
                 tabCount={tabCountB}
@@ -287,43 +250,72 @@ export function Compare({
                 }
               />
             </div>
-            {showAnalysisSection && (
-              <section className="flex min-h-0 min-w-0 flex-col gap-2">
-                <PhaseColumnHeading>1 · 分析</PhaseColumnHeading>
-                <AnalysisCell battleId={battleId} viewRound={viewB} isViewingLatest={latestB} />
-              </section>
-            )}
-            {showCodeSection && (
-              <section className="flex min-h-0 min-w-0 flex-col gap-2">
-                <PhaseColumnHeading>2 · 代码</PhaseColumnHeading>
-                {roundShowsCodePhase(viewB) ? (
-                  <CodeCell
-                    battleId={battleId}
-                    viewRound={viewB}
-                    isViewingLatest={latestB}
-                    previousComparableCode={prevCodeB || undefined}
-                  />
-                ) : (
-                  <PhasePairedPlaceholder>
-                    {viewB === undefined ? '该模型尚无这一轮输出。' : '等待分析完成…'}
-                  </PhasePairedPlaceholder>
-                )}
-              </section>
-            )}
-            {showOfficialSection && (
-              <section className="flex min-h-0 min-w-0 flex-col gap-2">
-                <PhaseColumnHeading>3 · 执行测试</PhaseColumnHeading>
-                {roundShowsOfficialPhase(viewB) ? (
-                  <OfficialCell hook={hookB} viewRound={viewB} isViewingLatest={latestB} />
-                ) : (
-                  <PhasePairedPlaceholder>
-                    {viewB === undefined ? '该模型尚无这一轮输出。' : '等待代码阶段完成…'}
-                  </PhasePairedPlaceholder>
-                )}
-              </section>
-            )}
           </div>
         </div>
+
+        {showAnalysisSection && (
+          <section className="flex min-h-0 min-w-0 flex-col gap-2">
+            <PhaseColumnHeading>1 · 分析</PhaseColumnHeading>
+            <div className={PHASE_PAIR_GRID}>
+              <AnalysisCell battleId={battleId} viewRound={viewA} isViewingLatest={latestA} />
+              <AnalysisCell battleId={battleId} viewRound={viewB} isViewingLatest={latestB} />
+            </div>
+          </section>
+        )}
+
+        {showCodeSection && (
+          <section className="flex min-h-0 min-w-0 flex-col gap-2">
+            <PhaseColumnHeading>2 · 代码</PhaseColumnHeading>
+            <div className={PHASE_PAIR_GRID}>
+              {roundShowsCodePhase(viewA) ? (
+                <CodeCell
+                  battleId={battleId}
+                  viewRound={viewA}
+                  isViewingLatest={latestA}
+                  previousComparableCode={prevCodeA || undefined}
+                />
+              ) : (
+                <PhasePairedPlaceholder>
+                  {viewA === undefined ? '该模型尚无这一轮输出。' : '等待分析完成…'}
+                </PhasePairedPlaceholder>
+              )}
+              {roundShowsCodePhase(viewB) ? (
+                <CodeCell
+                  battleId={battleId}
+                  viewRound={viewB}
+                  isViewingLatest={latestB}
+                  previousComparableCode={prevCodeB || undefined}
+                />
+              ) : (
+                <PhasePairedPlaceholder>
+                  {viewB === undefined ? '该模型尚无这一轮输出。' : '等待分析完成…'}
+                </PhasePairedPlaceholder>
+              )}
+            </div>
+          </section>
+        )}
+
+        {showOfficialSection && (
+          <section className="flex min-h-0 min-w-0 flex-col gap-2">
+            <PhaseColumnHeading>3 · 执行测试</PhaseColumnHeading>
+            <div className={PHASE_PAIR_GRID}>
+              {roundShowsOfficialPhase(viewA) ? (
+                <OfficialCell hook={hookA} viewRound={viewA} isViewingLatest={latestA} />
+              ) : (
+                <PhasePairedPlaceholder>
+                  {viewA === undefined ? '该模型尚无这一轮输出。' : '等待代码阶段完成…'}
+                </PhasePairedPlaceholder>
+              )}
+              {roundShowsOfficialPhase(viewB) ? (
+                <OfficialCell hook={hookB} viewRound={viewB} isViewingLatest={latestB} />
+              ) : (
+                <PhasePairedPlaceholder>
+                  {viewB === undefined ? '该模型尚无这一轮输出。' : '等待代码阶段完成…'}
+                </PhasePairedPlaceholder>
+              )}
+            </div>
+          </section>
+        )}
       </div>
     </>
   )
