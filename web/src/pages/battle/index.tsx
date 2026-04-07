@@ -381,12 +381,11 @@ export function Battle({
   }
 
   const headerControls = (
-    <div className="flex w-full min-w-0 flex-col gap-1">
-    <div className="flex w-full min-w-0 flex-wrap items-center gap-2">
-      <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+    <>
+      <div className="flex w-full min-w-0 flex-col gap-2 sm:flex-row sm:gap-3">
         <Select value={selectedProblem} onValueChange={setSelectedProblem}>
           <SelectTrigger
-            className="h-9 min-w-[10rem] max-w-[20rem] flex-1 sm:flex-none sm:max-w-[18rem]"
+            className="h-9 w-full sm:w-auto sm:min-w-[10rem] sm:max-w-[18rem]"
             aria-label="选择题目"
           >
             <SelectValue placeholder="题目…" />
@@ -399,84 +398,87 @@ export function Battle({
             ))}
           </SelectContent>
         </Select>
-        <Select value={modelA} onValueChange={setModelA}>
-          <SelectTrigger
-            className="h-9 w-full min-w-[8rem] sm:w-[11rem]"
-            aria-label="模型 A"
+        <div className="flex gap-2">
+          <Select value={modelA} onValueChange={setModelA}>
+            <SelectTrigger
+              className="h-9 flex-1 min-w-[8rem] sm:w-[11rem] sm:flex-none"
+              aria-label="模型 A"
+            >
+              <SelectValue placeholder="Model A" />
+            </SelectTrigger>
+            <SelectContent>
+              {selectableModels.map((m) => (
+                <SelectItem key={m.id} value={m.id}>
+                  {m.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={modelB} onValueChange={setModelB}>
+            <SelectTrigger
+              className="h-9 flex-1 min-w-[8rem] sm:w-[11rem] sm:flex-none"
+              aria-label="模型 B"
+            >
+              <SelectValue placeholder="Model B" />
+            </SelectTrigger>
+            <SelectContent>
+              {selectableModels.map((m) => (
+                <SelectItem key={m.id} value={m.id}>
+                  {m.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex flex-wrap gap-2 sm:flex-nowrap">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="flex-1 gap-1.5 sm:flex-none"
+            disabled={!selectedProblemRow}
+            aria-expanded={problemDetailOpen}
+            onClick={() => setProblemDetailOpen((o) => !o)}
           >
-            <SelectValue placeholder="Model A" />
-          </SelectTrigger>
-          <SelectContent>
-            {selectableModels.map((m) => (
-              <SelectItem key={m.id} value={m.id}>
-                {m.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select value={modelB} onValueChange={setModelB}>
-          <SelectTrigger
-            className="h-9 w-full min-w-[8rem] sm:w-[11rem]"
-            aria-label="模型 B"
+            题目详情
+            <ChevronDown
+              className={`h-3.5 w-3.5 text-muted-foreground transition-transform ${problemDetailOpen ? 'rotate-180' : ''}`}
+              aria-hidden
+            />
+          </Button>
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            className="flex-1 sm:flex-none"
+            disabled={selectableModels.length === 0 || !currentUser}
+            title={
+              !currentUser
+                ? '请使用 GitHub 登录后创建题目'
+                : selectableModels.length === 0
+                  ? '需至少一个可用模型以使用命题辅助'
+                  : undefined
+            }
+            onClick={() => setNewProblemOpen(true)}
           >
-            <SelectValue placeholder="Model B" />
-          </SelectTrigger>
-          <SelectContent>
-            {selectableModels.map((m) => (
-              <SelectItem key={m.id} value={m.id}>
-                {m.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="shrink-0 gap-1.5"
-          disabled={!selectedProblemRow}
-          aria-expanded={problemDetailOpen}
-          onClick={() => setProblemDetailOpen((o) => !o)}
-        >
-          题目详情
-          <ChevronDown
-            className={`h-3.5 w-3.5 text-muted-foreground transition-transform ${problemDetailOpen ? 'rotate-180' : ''}`}
-            aria-hidden
-          />
-        </Button>
-        <Button
-          type="button"
-          variant="secondary"
-          size="sm"
-          className="shrink-0"
-          disabled={selectableModels.length === 0 || !currentUser}
-          title={
-            !currentUser
-              ? '请使用 GitHub 登录后创建题目'
-              : selectableModels.length === 0
-                ? '需至少一个可用模型以使用命题辅助'
-                : undefined
-          }
-          onClick={() => setNewProblemOpen(true)}
-        >
-          新建题目
-        </Button>
+            新建题目
+          </Button>
+          <Button
+            type="button"
+            disabled={!canStart || battleStarting}
+            onClick={handleStartBattle}
+            className="h-9 flex-1 sm:flex-none"
+          >
+            {battleStarting ? '创建中…' : '开始对战'}
+          </Button>
+        </div>
       </div>
-      <Button
-        type="button"
-        disabled={!canStart || battleStarting}
-        onClick={handleStartBattle}
-        className="h-9 shrink-0"
-      >
-        {battleStarting ? '创建中…' : '开始对战'}
-      </Button>
-    </div>
       {startBattleErr ? (
         <p className="text-sm text-destructive" role="alert">
           {startBattleErr}
         </p>
       ) : null}
-    </div>
+    </>
   )
 
   const detailLoading =
@@ -519,7 +521,7 @@ export function Battle({
 
   return (
     <div className="space-y-6">
-      {headerSlotEl ? createPortal(headerControls, headerSlotEl) : null}
+      {headerSlotEl ? createPortal(headerControls, headerSlotEl) : headerControls}
 
       {mainPanel}
 

@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { BookOpen, Box, History, ScrollText, Swords, Trophy } from 'lucide-react'
+import { BookOpen, Box, History, Menu, ScrollText, Swords, Trophy, X } from 'lucide-react'
 import { api } from '@/api/client'
 import { LoginAutoSyncBattles } from '@/components/login-auto-sync-battles'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { BattleDetailNavProvider } from '@/context/battle-replay-nav'
 import { useMe, useModels, useProblems } from '@/hooks/useApi'
+import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { Battle } from '@/pages/battle'
 import { BattleHistory } from '@/pages/battle/history'
 import { LeaderboardPage } from '@/pages/leaderboard'
@@ -120,6 +122,19 @@ function App() {
   const [shell, setShell] = useState<ShellState>(() => readShellStateFromUrl())
   const { view, adminTab, openBattleDetailId } = shell
   const [authBanner, setAuthBanner] = useState<string | null>(null)
+  const [sidebarOpen, setSidebarOpen] = useState(false)
+  const isMobile = useMediaQuery('(max-width: 1023px)')
+
+  const mobileTitle =
+    view === 'battle'
+      ? '对战'
+      : view === 'battleHistory'
+        ? '对战历史'
+        : view === 'problems'
+          ? '题库'
+          : view === 'admin'
+            ? adminTab === 'logs' ? '日志' : '模型'
+            : '排行榜'
 
   const navigate = useCallback((patch: Partial<ShellState> & { replace?: boolean }) => {
     const { replace, ...rest } = patch
@@ -209,22 +224,49 @@ function App() {
     <BattleDetailNavProvider value={{ openBattleDetail }}>
     <div className="flex h-full min-h-0 overflow-hidden bg-background">
       <LoginAutoSyncBattles user={user} />
-      <aside className="flex w-64 shrink-0 flex-col overflow-y-auto border-r border-arena-sidebar-border bg-arena-sidebar p-4">
-        <div className="flex items-center gap-2.5 mb-8 px-2">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center ring-1 ring-white/10">
-            <span className="text-white font-bold text-sm tracking-tight">CS</span>
+      
+      {isMobile && sidebarOpen && (
+        <div 
+          className="fixed inset-0 z-40 bg-black/50 lg:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+      
+      <aside className={`
+        fixed inset-y-0 left-0 z-50 w-64 flex flex-col overflow-y-auto border-r border-arena-sidebar-border bg-arena-sidebar p-4 transition-transform duration-300
+        lg:static lg:z-auto lg:shrink-0 lg:transition-none
+        ${sidebarOpen || !isMobile ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
+      `}>
+        <div className="flex items-center justify-between gap-2.5 mb-8 px-2">
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center ring-1 ring-white/10">
+              <span className="text-white font-bold text-sm tracking-tight">CS</span>
+            </div>
+            <div className="flex flex-col gap-0.5 min-w-0">
+              <span className="font-semibold text-foreground tracking-tight truncate">CodeSmash</span>
+              <span className="text-[11px] text-muted-foreground font-medium uppercase tracking-wider">
+                Arena
+              </span>
+            </div>
           </div>
-          <div className="flex flex-col gap-0.5 min-w-0">
-            <span className="font-semibold text-foreground tracking-tight truncate">CodeSmash</span>
-            <span className="text-[11px] text-muted-foreground font-medium uppercase tracking-wider">
-              Arena
-            </span>
-          </div>
+          {isMobile && (
+            <button
+              type="button"
+              onClick={() => setSidebarOpen(false)}
+              className="p-1.5 rounded-md hover:bg-arena-sidebar-active/60"
+              aria-label="关闭菜单"
+            >
+              <X className="h-5 w-5 text-muted-foreground" />
+            </button>
+          )}
         </div>
         <nav className="flex flex-1 flex-col gap-0.5 min-h-0" aria-label="Main">
           <button
             type="button"
-            onClick={() => navigate({ view: 'battle', openBattleDetailId: null })}
+            onClick={() => {
+              navigate({ view: 'battle', openBattleDetailId: null })
+              if (isMobile) setSidebarOpen(false)
+            }}
             className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors text-left ${
               view === 'battle'
                 ? 'bg-arena-sidebar-active text-arena-sidebar-active-fg shadow-arena'
@@ -240,7 +282,10 @@ function App() {
           </button>
           <button
             type="button"
-            onClick={() => navigate({ view: 'battleHistory' })}
+            onClick={() => {
+              navigate({ view: 'battleHistory' })
+              if (isMobile) setSidebarOpen(false)
+            }}
             className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors text-left ${
               view === 'battleHistory'
                 ? 'bg-arena-sidebar-active text-arena-sidebar-active-fg shadow-arena'
@@ -256,7 +301,10 @@ function App() {
           </button>
           <button
             type="button"
-            onClick={() => navigate({ view: 'problems' })}
+            onClick={() => {
+              navigate({ view: 'problems' })
+              if (isMobile) setSidebarOpen(false)
+            }}
             className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors text-left ${
               view === 'problems'
                 ? 'bg-arena-sidebar-active text-arena-sidebar-active-fg shadow-arena'
@@ -272,7 +320,10 @@ function App() {
           </button>
           <button
             type="button"
-            onClick={() => navigate({ view: 'leaderboard' })}
+            onClick={() => {
+              navigate({ view: 'leaderboard' })
+              if (isMobile) setSidebarOpen(false)
+            }}
             className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors text-left ${
               view === 'leaderboard'
                 ? 'bg-arena-sidebar-active text-arena-sidebar-active-fg shadow-arena'
@@ -293,7 +344,10 @@ function App() {
               </p>
               <button
                 type="button"
-                onClick={() => navigate({ view: 'admin', adminTab: 'models' })}
+                onClick={() => {
+                  navigate({ view: 'admin', adminTab: 'models' })
+                  if (isMobile) setSidebarOpen(false)
+                }}
                 className={`flex w-full items-center gap-3 rounded-lg py-2 pl-6 pr-3 text-sm font-medium transition-colors text-left ${
                   view === 'admin' && adminTab === 'models'
                     ? 'bg-arena-sidebar-active text-arena-sidebar-active-fg shadow-arena'
@@ -309,7 +363,10 @@ function App() {
               </button>
               <button
                 type="button"
-                onClick={() => navigate({ view: 'admin', adminTab: 'logs' })}
+                onClick={() => {
+                  navigate({ view: 'admin', adminTab: 'logs' })
+                  if (isMobile) setSidebarOpen(false)
+                }}
                 className={`flex w-full items-center gap-3 rounded-lg py-2 pl-6 pr-3 text-sm font-medium transition-colors text-left ${
                   view === 'admin' && adminTab === 'logs'
                     ? 'bg-arena-sidebar-active text-arena-sidebar-active-fg shadow-arena'
@@ -373,7 +430,7 @@ function App() {
           id="app-shell-header"
           className="relative z-10 shrink-0 overflow-visible border-b border-border/80 bg-arena-header-blur/85 backdrop-blur-md supports-[backdrop-filter]:bg-background/75"
         >
-          <div className="mx-auto w-full max-w-7xl px-6 py-4 sm:px-8 lg:px-10">
+          <div className="mx-auto w-full max-w-7xl px-4 py-3 sm:px-6 lg:px-10 lg:py-4">
             {authBanner && (
               <p className="mb-3 text-sm text-destructive" role="alert">
                 {authBanner}
@@ -386,36 +443,109 @@ function App() {
                 </button>
               </p>
             )}
-            {view === 'battle' ? (
-              <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between lg:gap-6">
-                <h1 className="shrink-0 text-xl font-semibold tracking-tight text-foreground">对战</h1>
-                <div
-                  id="battle-header-slot"
-                  className="flex min-w-0 flex-1 flex-wrap items-center gap-2 lg:justify-end"
-                />
+            
+            {/* 移动端顶栏：菜单 + 标题 + 用户头像 */}
+            {isMobile && (
+              <div className="mb-3 grid grid-cols-[4.5rem_1fr_4.5rem] items-center gap-2">
+                <div className="flex w-[4.5rem] items-center justify-start">
+                  <button
+                    type="button"
+                    className="inline-flex h-9 w-[4.5rem] items-center justify-center gap-1 rounded-md border border-border/80 px-2 text-sm font-medium text-foreground hover:bg-muted/50"
+                    onClick={() => setSidebarOpen(true)}
+                    aria-label="打开菜单"
+                  >
+                    <Menu className="h-4 w-4" aria-hidden />
+                    菜单
+                  </button>
+                </div>
+                <p className="truncate text-center text-base font-semibold tracking-tight text-foreground">
+                  {mobileTitle}
+                </p>
+                {meLoading ? (
+                  <span className="inline-flex h-9 w-[4.5rem] items-center justify-end text-xs text-muted-foreground">
+                    会话…
+                  </span>
+                ) : user ? (
+                  <div className="flex w-[4.5rem] items-center justify-end">
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <button
+                          type="button"
+                          className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-border/80 bg-background/60"
+                          aria-label="账号菜单"
+                        >
+                          {user.avatarUrl ? (
+                            <img
+                              src={user.avatarUrl}
+                              alt={user.name ?? user.login}
+                              className="h-8 w-8 rounded-full ring-1 ring-border"
+                            />
+                          ) : (
+                            <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-muted text-xs font-semibold text-foreground">
+                              {(user.name ?? user.login).slice(0, 1).toUpperCase()}
+                            </span>
+                          )}
+                        </button>
+                      </PopoverTrigger>
+                      <PopoverContent align="end" className="w-44 p-3">
+                        <p className="truncate text-sm font-medium text-foreground">{user.name ?? user.login}</p>
+                        <p className="truncate text-xs text-muted-foreground">@{user.login}</p>
+                        <button
+                          type="button"
+                          className="mt-2 inline-flex h-8 w-full items-center justify-center rounded-md border border-border/80 px-2 text-xs font-medium text-foreground hover:bg-muted/50"
+                          onClick={() => void handleLogout()}
+                        >
+                          退出登录
+                        </button>
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+                ) : (
+                  <a
+                    href={githubLoginHref()}
+                    className="inline-flex h-9 w-[4.5rem] items-center justify-center rounded-md bg-foreground px-2 text-sm font-medium text-background hover:opacity-90"
+                  >
+                    登录
+                  </a>
+                )}
               </div>
-            ) : view === 'problems' ? (
-              <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between lg:gap-6">
-                <h1 className="shrink-0 text-xl font-semibold tracking-tight text-foreground">题库</h1>
-                <div
-                  id="problems-header-slot"
-                  className="flex min-w-0 flex-1 flex-wrap items-center gap-2 lg:justify-end"
-                />
-              </div>
-            ) : view === 'battleHistory' ? (
-              <h1 className="text-xl font-semibold tracking-tight text-foreground">对战历史</h1>
-            ) : view === 'admin' ? (
-              <h1 className="text-xl font-semibold tracking-tight text-foreground">
-                {adminTab === 'logs' ? '日志' : '模型'}
-              </h1>
-            ) : (
-              <h1 className="text-xl font-semibold tracking-tight text-foreground">排行榜</h1>
+            )}
+            
+            {/* PC端标题和表单 */}
+            {!isMobile && (
+              <>
+                {view === 'battle' ? (
+                  <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between lg:gap-6">
+                    <h1 className="shrink-0 text-xl font-semibold tracking-tight text-foreground">对战</h1>
+                    <div
+                      id="battle-header-slot"
+                      className="flex min-w-0 flex-1 flex-wrap items-center gap-2 lg:justify-end"
+                    />
+                  </div>
+                ) : view === 'problems' ? (
+                  <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between lg:gap-6">
+                    <h1 className="shrink-0 text-xl font-semibold tracking-tight text-foreground">题库</h1>
+                    <div
+                      id="problems-header-slot"
+                      className="flex min-w-0 flex-1 flex-wrap items-center gap-2 lg:justify-end"
+                    />
+                  </div>
+                ) : view === 'battleHistory' ? (
+                  <h1 className="text-xl font-semibold tracking-tight text-foreground">对战历史</h1>
+                ) : view === 'admin' ? (
+                  <h1 className="text-xl font-semibold tracking-tight text-foreground">
+                    {adminTab === 'logs' ? '日志' : '模型'}
+                  </h1>
+                ) : (
+                  <h1 className="text-xl font-semibold tracking-tight text-foreground">排行榜</h1>
+                )}
+              </>
             )}
           </div>
         </header>
 
         <main className="min-h-0 flex-1 overflow-y-auto">
-          <div className="mx-auto w-full max-w-7xl px-6 py-8 sm:px-8 lg:px-10">
+          <div className="mx-auto w-full max-w-7xl px-4 py-5 sm:px-6 sm:py-6 lg:px-10 lg:py-8">
             {view === 'battle' && (
               <Battle
                 models={models}
