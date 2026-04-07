@@ -25,8 +25,10 @@ description: >-
 3. **前端（`web/`）**：Vite + React + TypeScript；`package.json` 的 `name` 为 `{{WEB_PACKAGE_NAME}}`（符合 npm 规则）；HTML `title` / meta 使用 `{{APP_DISPLAY_NAME}}`。
 4. **后端（`server/`）**：Deno，`deno.json`，入口 `src/main.ts`；环境变量**仅**通过 `.env.example` 说明模板——秘钥永不入库；注释与文档示例使用 `{{API_PUBLIC_URL}}` 这类占位。
 5. **CI / 部署**：若添加 workflow，registry、主机与秘钥通过 GitHub **Environments / Variables** 注入，勿在仓库中写死 URL（文档中的 `example.com` 除外）。
-6. **Cursor 规则**：若仓库包含 `.cursor/rules`，保持**与品牌无关**（仅 globs 与约定），不要写入营销用名称。
-7. **验证**：按技术栈执行安装与构建；修正路径与环境样例，直到 web 与 server 在开发模式下均可启动。
+6. **README**：写根目录 `README.md` 的模板化版本，至少包含：核心功能流程、前端构建/部署（GitHub Pages）、服务端构建/部署（Deno Deploy）、数据库（Turso/libSQL）。所有对外地址均用占位符，不写真实域名。
+7. **PWA（web）**：补齐 `manifest.webmanifest`、`web/public/pwa-icon.svg`、`web/public/pwa-icon-maskable.svg`；`manifest` 中同时声明常规 icon 与 `purpose: "maskable"` 图标。图标文字与标识一律用占位符语义（如 `{{APP_INITIALS}}`），不要写固定品牌字样。
+8. **Cursor 规则**：若仓库包含 `.cursor/rules`，保持**与品牌无关**（仅 globs 与约定），不要写入营销用名称。
+9. **验证**：按技术栈执行安装与构建；修正路径与环境样例，直到 web 与 server 在开发模式下均可启动。
 
 ## Web 约定（摘要）
 
