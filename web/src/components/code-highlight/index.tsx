@@ -3,10 +3,11 @@ import { highlightJavaScriptToHtml } from '@/lib/treeSitterJavaScript'
 
 type Props = {
   code: string
+  language?: string
   className?: string
 }
 
-export function CodeBlock({ code, className }: Props) {
+export function CodeHighlight({ code, language, className }: Props) {
   const [html, setHtml] = useState<string | null>(null)
   const [plainFallback, setPlainFallback] = useState(false)
 
@@ -14,20 +15,28 @@ export function CodeBlock({ code, className }: Props) {
     let alive = true
     setPlainFallback(false)
     setHtml(null)
-    highlightJavaScriptToHtml(code)
-      .then((h) => {
-        if (!alive) return
-        setHtml(h)
-      })
-      .catch((err) => {
-        if (import.meta.env.DEV) console.warn('[tree-sitter highlight]', err)
-        if (!alive) return
-        setPlainFallback(true)
-      })
+
+    const lang = (language || '').toLowerCase()
+
+    if (lang === 'javascript' || lang === 'js' || lang === 'typescript' || lang === 'ts' || lang === '' || !lang) {
+      highlightJavaScriptToHtml(code)
+        .then((h) => {
+          if (!alive) return
+          setHtml(h)
+        })
+        .catch((err) => {
+          if (import.meta.env.DEV) console.warn('[tree-sitter highlight]', err)
+          if (!alive) return
+          setPlainFallback(true)
+        })
+    } else {
+      setPlainFallback(true)
+    }
+
     return () => {
       alive = false
     }
-  }, [code])
+  }, [code, language])
 
   if (plainFallback) {
     return (

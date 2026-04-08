@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Check, ChevronRight, Copy, GitCompare } from 'lucide-react'
 import { useStickToBottomScroll } from '@/hooks/useStickToBottomScroll'
-import { CodeBlock } from '@/components/code-block'
+import { CodeHighlight } from '@/components/code-highlight'
 import { MarkdownViewer } from '@/components/markdown-viewer'
 import { Button } from '@/components/ui/button'
 import {
@@ -492,8 +492,9 @@ export function CodeCell({
                   <CodeLineDiffPanel before={previousComparableCode} after={codeForHighlight} />
                 ) : (
                   <div className={CODE_BLOCK_INNER}>
-                    <CodeBlock
+                    <CodeHighlight
                       code={codeForHighlight}
+                      language="javascript"
                       className="m-0 overflow-x-auto whitespace-pre-wrap break-words font-mono text-sm leading-relaxed text-foreground"
                     />
                   </div>

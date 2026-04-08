@@ -1,12 +1,40 @@
-import ReactMarkdown from 'react-markdown'
+import ReactMarkdown, { type Components } from 'react-markdown'
 import remarkBreaks from 'remark-breaks'
 import remarkGfm from 'remark-gfm'
-import rehypeHighlight from 'rehype-highlight'
-import 'highlight.js/styles/github-dark.css'
+import { CodeHighlight } from '@/components/code-highlight'
 
 type Props = {
   content: string
   className?: string
+}
+
+const components: Components = {
+  code({ className, children, ...props }) {
+    const match = /language-(\w+)/.exec(className || '')
+    const language = match ? match[1] : undefined
+    const codeString = String(children).replace(/\n$/, '')
+
+    const isInline = !className
+
+    if (isInline) {
+      return (
+        <code className={className} {...props}>
+          {children}
+        </code>
+      )
+    }
+
+    return (
+      <CodeHighlight
+        code={codeString}
+        language={language}
+        className="!my-0 !bg-muted/30 !p-3 overflow-x-auto rounded-md text-sm"
+      />
+    )
+  },
+  pre({ children }) {
+    return <>{children}</>
+  },
 }
 
 export function MarkdownViewer({ content, className }: Props) {
@@ -27,10 +55,7 @@ export function MarkdownViewer({ content, className }: Props) {
         .filter(Boolean)
         .join(' ')}
     >
-      <ReactMarkdown
-        remarkPlugins={[remarkGfm, remarkBreaks]}
-        rehypePlugins={[rehypeHighlight]}
-      >
+      <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} components={components}>
         {content}
       </ReactMarkdown>
     </div>

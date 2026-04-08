@@ -188,12 +188,12 @@
   color: hsl(172 52% 60%);
 }
 
-/* Markdown viewer: fenced code (highlight.js puts .hljs on <code>) */
+/* Markdown viewer: fenced code */
 .markdown-viewer pre {
   @apply rounded-md border border-border overflow-x-auto p-0 my-3;
   background: hsl(var(--arena-code-bg));
 }
-.markdown-viewer pre code.hljs {
+.markdown-viewer pre code.code-highlight-root {
   @apply block p-3 text-sm font-mono leading-relaxed bg-transparent text-inherit;
 }
 .markdown-viewer :not(pre) > code {
