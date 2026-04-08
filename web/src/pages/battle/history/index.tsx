@@ -99,9 +99,8 @@ export function BattleHistory() {
   const user = meData?.user ?? null
   const { data: models = [] } = useModels()
   const { data: problems = [] } = useProblems()
-  const cloudEnabled = !!user
-  const { data: cloudData, isLoading: cloudLoading } = useBattleResults(cloudEnabled)
-  const cloudItems: BattleResultListItem[] = user ? (cloudData?.items ?? []) : []
+  const { data: cloudData, isLoading: cloudLoading } = useBattleResults()
+  const cloudItems: BattleResultListItem[] = cloudData?.items ?? []
 
   const [localTick, setLocalTick] = useState(0)
   const localEntries = useMemo(() => {
@@ -485,7 +484,7 @@ export function BattleHistory() {
         </table>
       </div>
 
-      {cloudEnabled && cloudLoading ? (
+      {cloudLoading ? (
         <p className="text-xs text-muted-foreground">正在加载云端列表…</p>
       ) : null}
 

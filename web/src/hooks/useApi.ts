@@ -168,11 +168,10 @@ export function useLeaderboard(opts?: { problemId?: string; scope?: 'all' | 'min
   })
 }
 
-export function useBattleResults(enabled: boolean) {
+export function useBattleResults() {
   return useQuery({
     queryKey: ['battle-results'],
     queryFn: () => api.getBattleResults({ limit: 100 }),
-    enabled,
     staleTime: 30_000,
   })
 }

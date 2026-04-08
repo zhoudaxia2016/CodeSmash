@@ -3,8 +3,8 @@ import { getLibsqlClient } from '../db/client.ts'
 import type { SessionUser } from '../db/userSessionsRepo.ts'
 import {
   deleteBattleResultForUser,
-  getBattleResultPayloadRowForUser,
-  listBattleResultsForUser,
+  getBattleResultPayloadRow,
+  listAllBattleResults,
   upsertBattleResult,
 } from '../db/battleResultsRepo.ts'
 import { evictActiveBattle } from './battles.ts'
@@ -14,8 +14,7 @@ const battleResultsRouter = new Hono<{ Variables: { user?: SessionUser } }>()
 
 const LIST_LIMIT_MAX = 200
 
-battleResultsRouter.get('/', requireAuth, async (c) => {
-  const user = getSessionUser(c)
+battleResultsRouter.get('/', async (c) => {
   const limitRaw = c.req.query('limit')
   const offsetRaw = c.req.query('offset')
   let limit = Number(limitRaw ?? 50)
@@ -26,7 +25,7 @@ battleResultsRouter.get('/', requireAuth, async (c) => {
 
   const client = getLibsqlClient()
   try {
-    const items = await listBattleResultsForUser(client, user.id, limit, offset)
+    const items = await listAllBattleResults(client, limit, offset)
     return c.json({ items })
   } catch (e) {
     console.error('[battle-results] list', e)
@@ -34,15 +33,14 @@ battleResultsRouter.get('/', requireAuth, async (c) => {
   }
 })
 
-battleResultsRouter.get('/:id', requireAuth, async (c) => {
-  const user = getSessionUser(c)
+battleResultsRouter.get('/:id', async (c) => {
   const id = c.req.param('id')
   if (!id) return c.json({ error: 'id required' }, 400)
 
   const client = getLibsqlClient()
   let row: { payloadJson: string } | null
   try {
-    row = await getBattleResultPayloadRowForUser(client, id, user.id)
+    row = await getBattleResultPayloadRow(client, id)
   } catch (e) {
     console.error('[battle-results] get', e)
     return c.json({ error: 'Failed to load battle result' }, 500)
