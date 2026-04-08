@@ -24,8 +24,14 @@ function OfficialResultTableBlock({
 }) {
   const resultsLayoutRef = useRef<HTMLDivElement>(null)
   const [useStackedResults, setUseStackedResults] = useState(false)
+  const [resultFilter, setResultFilter] = useState<'all' | 'passed' | 'failed'>('all')
   const officialDetails = displayResult.officialResult?.details
   const hasOfficialDetails = Boolean(officialDetails && officialDetails.length > 0)
+  const filteredOfficialDetails = (officialDetails ?? []).filter((row) => {
+    if (resultFilter === 'passed') return row.passed
+    if (resultFilter === 'failed') return !row.passed
+    return true
+  })
   const { passed, total } = officialMetrics(displayResult)
 
   useLayoutEffect(() => {
@@ -49,14 +55,46 @@ function OfficialResultTableBlock({
 
   return (
     <div ref={resultsLayoutRef} className="min-w-0 space-y-2 px-1 pt-1">
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
-        <span>
-          <span className="text-muted-foreground">通过</span>
-          <span className="ml-1.5 font-medium tabular-nums text-foreground">
-            {passed}/{total}
+      <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          <span>
+            <span className="text-muted-foreground">通过</span>
+            <span className="ml-1.5 font-medium tabular-nums text-foreground">
+              {passed}/{total}
+            </span>
           </span>
-        </span>
-        <CompactOfficialTiming r={displayResult} runningOfficial={false} />
+          <CompactOfficialTiming r={displayResult} runningOfficial={false} />
+        </div>
+        {hasOfficialDetails && (
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              className={`rounded-md border px-2 py-1 text-xs transition-colors ${
+                resultFilter === 'failed'
+                  ? 'border-red-500/50 bg-red-500/10 text-red-700 dark:text-red-300'
+                  : 'border-border bg-background text-muted-foreground hover:text-foreground'
+              }`}
+              onClick={() =>
+                setResultFilter((prev) => (prev === 'failed' ? 'all' : 'failed'))
+              }
+            >
+              错误
+            </button>
+            <button
+              type="button"
+              className={`rounded-md border px-2 py-1 text-xs transition-colors ${
+                resultFilter === 'passed'
+                  ? 'border-emerald-500/50 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+                  : 'border-border bg-background text-muted-foreground hover:text-foreground'
+              }`}
+              onClick={() =>
+                setResultFilter((prev) => (prev === 'passed' ? 'all' : 'passed'))
+              }
+            >
+              正确
+            </button>
+          </div>
+        )}
       </div>
       {displayResult.officialResult &&
         displayResult.officialResult.total === 0 &&
@@ -98,7 +136,7 @@ function OfficialResultTableBlock({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
-                  {officialDetails.map((row: TestResult, idx: number) => {
+                  {filteredOfficialDetails.map((row: TestResult, idx: number) => {
                     const codeBody = (displayResult.code ?? '').trim()
                     return (
                       <tr key={row.testCaseId} className="bg-background/50">
@@ -140,9 +178,12 @@ function OfficialResultTableBlock({
               </table>
             </div>
           )}
+          {filteredOfficialDetails.length === 0 && (
+            <p className="text-xs text-muted-foreground">当前筛选下暂无用例。</p>
+          )}
           {useStackedResults && (
             <ul className="space-y-2">
-              {officialDetails.map((row: TestResult, idx: number) => {
+              {filteredOfficialDetails.map((row: TestResult, idx: number) => {
                 const codeBody = (displayResult.code ?? '').trim()
                 return (
                   <li
