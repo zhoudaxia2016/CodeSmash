@@ -33,7 +33,6 @@ type ProblemEditorRow = {
   serverId?: string
   data: string
   ans: string
-  deleted?: boolean
 }
 
 type ProblemEditorConfirmCreate = {
@@ -127,7 +126,7 @@ function parseRowPayload(
 }
 
 function rowsToTestCaseRows(rows: ProblemEditorRow[]): TestCaseRow[] {
-  return rows.filter((r) => !r.deleted).map((r) => ({ data: r.data, ans: r.ans }))
+  return rows.map((r) => ({ data: r.data, ans: r.ans }))
 }
 
 export function ProblemEditorForm({
@@ -217,7 +216,6 @@ export function ProblemEditorForm({
       serverId: tc.id,
       data: tc.input,
       ans: tc.expectedOutput ?? '',
-      deleted: false,
     }))
     setRows(next)
     const snap = new Map<string, { data: string; ans: string }>()
@@ -292,7 +290,6 @@ export function ProblemEditorForm({
 
         const existing = new Set<string>()
         for (const r of rows) {
-          if (r.deleted) continue
           const k = normalizeDataKey(r.data)
           if (k) existing.add(k)
         }
@@ -323,7 +320,7 @@ export function ProblemEditorForm({
   const addRow = () => {
     setRows((prev) => [
       ...prev,
-      { key: `new-${crypto.randomUUID()}`, data: '', ans: '', deleted: false },
+      { key: `new-${crypto.randomUUID()}`, data: '', ans: '' },
     ])
   }
 
@@ -356,10 +353,6 @@ export function ProblemEditorForm({
     })
   }
 
-  const restoreRow = (key: string) => {
-    setRows((prev) => prev.map((r) => (r.key === key ? { ...r, deleted: false } : r)))
-  }
-
   const updateRow = (key: string, patch: Partial<Pick<ProblemEditorRow, 'data' | 'ans'>>) => {
     setRows((prev) => prev.map((r) => (r.key === key ? { ...r, ...patch } : r)))
   }
@@ -379,8 +372,6 @@ export function ProblemEditorForm({
       setError('verify 模式下须填写验证函数源码')
       return
     }
-
-    const visible = rows.filter((r) => !r.deleted)
 
     if (mode === 'create') {
       let parsed: { data: unknown[][]; answers: unknown[] | null }
@@ -432,25 +423,19 @@ export function ProblemEditorForm({
       setError('缺少题目 id')
       return
     }
-    for (let i = 0; i < visible.length; i++) {
-      const p = parseRowPayload(visible[i], gradingMode)
+    for (let i = 0; i < rows.length; i++) {
+      const p = parseRowPayload(rows[i], gradingMode)
       if ('error' in p) {
         setError(`用例 ${i + 1}：${p.error}`)
         return
       }
     }
 
-    const testCaseDeletes: string[] = []
-    for (const r of rows) {
-      if (r.deleted && r.serverId) testCaseDeletes.push(r.serverId)
-    }
-    if (forcedDeleteIds.length > 0) {
-      for (const id of forcedDeleteIds) testCaseDeletes.push(id)
-    }
+    const testCaseDeletes: string[] = [...forcedDeleteIds]
     const uniqueDeletes = Array.from(new Set(testCaseDeletes))
     const testCaseUpdates: Array<{ testCaseId: string; data: unknown[]; ans?: unknown }> = []
     for (const r of rows) {
-      if (r.deleted || !r.serverId) continue
+      if (!r.serverId) continue
       const orig = initialTc.get(r.serverId)
       if (!orig) continue
       if (orig.data === r.data && orig.ans === r.ans) continue
@@ -460,7 +445,7 @@ export function ProblemEditorForm({
     }
     const testCaseCreates: Array<{ data: unknown[]; ans?: unknown }> = []
     for (const r of rows) {
-      if (r.deleted || r.serverId) continue
+      if (r.serverId) continue
       const p = parseRowPayload(r, gradingMode)
       if ('error' in p) continue
       testCaseCreates.push({ data: p.data, ans: p.ans })
@@ -646,26 +631,6 @@ export function ProblemEditorForm({
                             {(() => {
                               let n = 0
                               return rows.map((r) => {
-                                if (r.deleted) {
-                                  return (
-                                    <tr key={r.key} className="border-b border-border/60 bg-amber-500/5">
-                                      <td colSpan={gradingMode === 'expected' ? 4 : 3} className="px-2 py-2">
-                                        <div className="flex items-center justify-between gap-2 text-muted-foreground">
-                                          <span>已保存用例（已标记删除，保存后从服务器移除）</span>
-                                          <Button
-                                            type="button"
-                                            variant="ghost"
-                                            size="sm"
-                                            className="h-7 text-xs"
-                                            onClick={() => restoreRow(r.key)}
-                                          >
-                                            恢复
-                                          </Button>
-                                        </div>
-                                      </td>
-                                    </tr>
-                                  )
-                                }
                                 n += 1
                                 return (
                                   <tr key={r.key} className="border-b border-border/60 align-top">
