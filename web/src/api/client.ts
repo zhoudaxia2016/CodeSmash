@@ -198,11 +198,19 @@ export const api = {
     return handleResponse(res)
   },
 
-  async updateProblem(id: string, data: Partial<import('../types').Problem>): Promise<import('../types').Problem> {
+  async saveProblem(
+    id: string,
+    body: {
+      problem: Partial<import('../types').Problem>
+      testCaseDeletes: string[]
+      testCaseUpdates: Array<{ testCaseId: string; data: unknown[]; ans?: unknown }>
+      testCaseCreates: Array<{ data: unknown[]; ans?: unknown }>
+    },
+  ): Promise<{ problem: import('../types').Problem; testCases: import('../types').TestCase[] }> {
     const res = await apiFetch(`${API_BASE}/problems/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
+      body: JSON.stringify(body),
     })
     return handleResponse(res)
   },

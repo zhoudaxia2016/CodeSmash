@@ -61,18 +61,6 @@ export function useSuggestProblemAuthoring() {
   })
 }
 
-export function useUpdateProblem() {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: ({ id, data }: { id: string; data: Parameters<typeof api.updateProblem>[1] }) =>
-      api.updateProblem(id, data),
-    onSuccess: (_, { id }) => {
-      void queryClient.invalidateQueries({ queryKey: ['problems', id] })
-      void queryClient.invalidateQueries({ queryKey: ['problems'] })
-    },
-  })
-}
-
 export function useDeleteProblem() {
   const queryClient = useQueryClient()
   return useMutation({

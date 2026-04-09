@@ -199,9 +199,15 @@ problemsRouter.post('/', requireAuth, async (c) => {
 
 problemsRouter.patch('/:id', requireAuth, async (c) => {
   const id = c.req.param('id')
-  const patch = await c.req.json() as Partial<CreateProblemInput>
+  const body = await c.req.json() as {
+    problem?: Partial<CreateProblemInput>
+    testCaseDeletes?: string[]
+    testCaseUpdates?: Array<{ testCaseId: string; data: unknown[]; ans?: unknown }>
+    testCaseCreates?: Array<{ data: unknown[]; ans?: unknown }>
+  }
   const client = getLibsqlClient()
 
+  const patch = (body.problem ?? {}) as Partial<CreateProblemInput>
   if (patch.entryPoint != null && patch.functionSignature != null) {
     const v = validateEntryPointAgainstSignature(patch.entryPoint, patch.functionSignature)
     if (!v.ok) return c.json({ error: v.message }, 400)
@@ -215,10 +221,29 @@ problemsRouter.patch('/:id', requireAuth, async (c) => {
   }
 
   const updated = await updateProblem(client, id, patch)
-  if (!updated) {
-    return c.json({ error: 'Problem not found' }, 404)
+  if (!updated) return c.json({ error: 'Problem not found' }, 404)
+
+  const deletes = Array.isArray(body.testCaseDeletes) ? body.testCaseDeletes : []
+  const updates = Array.isArray(body.testCaseUpdates) ? body.testCaseUpdates : []
+  const creates = Array.isArray(body.testCaseCreates) ? body.testCaseCreates : []
+
+  for (const tcId of deletes) {
+    await deleteTestCase(client, id, tcId)
   }
-  return c.json({ problem: problemToJson(updated) })
+  for (const tc of updates) {
+    if (!tc?.testCaseId) continue
+    await updateTestCase(client, id, tc.testCaseId, { data: tc.data, ans: tc.ans })
+  }
+  for (const tc of creates) {
+    if (!Array.isArray(tc?.data)) continue
+    await createTestCase(client, id, { data: tc.data, ans: tc.ans })
+  }
+
+  const rows = await listTestCasesForProblem(client, id)
+  return c.json({
+    problem: problemToJson(updated),
+    testCases: rows.map((tc) => testCaseToJson(tc, updated.gradingMode)),
+  })
 })
 
 problemsRouter.delete('/:id', requireAuth, async (c) => {

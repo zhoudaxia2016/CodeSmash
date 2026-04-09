@@ -323,6 +323,7 @@ export function ProblemEditorForm({
   }
 
   const handleSubmit = async () => {
+    if (pending) return
     setError(null)
     if (!title.trim() || !description.trim()) {
       setError(mode === 'create' ? '题目描述与标题均必填' : '标题与描述必填')
