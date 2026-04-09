@@ -52,7 +52,7 @@ export function Result({
 
   const terminal =
     battle != null && (battle.status === 'completed' || battle.status === 'failed')
-  const localEntry = battle && terminal ? getLocalBattleEntry(battle.id) : null
+  const localEntry = !archiveMode && battle && terminal ? getLocalBattleEntry(battle.id) : null
   const alreadyOnCloud = cloudSynced
   const canSyncToCloud =
     !archiveMode &&

@@ -3,13 +3,12 @@ import { useQueryClient } from '@tanstack/react-query'
 import { api } from '@/api/client'
 import type { AuthUser } from '@/types'
 import { loadLocalBattleHistory, removeLocalBattleEntry } from '@/utils/battle-local-history'
-import { loadBattleSyncPrefs } from '@/utils/battle-sync-prefs'
 
 type Props = {
   user: AuthUser | null
 }
 
-/** 登录后按偏好静默同步本机未上传的对战（无弹窗）。 */
+/** 登录后静默同步本机未上传的对战（无弹窗）。 */
 export function LoginAutoSyncBattles({ user }: Props) {
   const queryClient = useQueryClient()
   const prevUserId = useRef<string | null>(null)
@@ -20,7 +19,6 @@ export function LoginAutoSyncBattles({ user }: Props) {
     prevUserId.current = id
 
     if (!becameLoggedIn || !user) return
-    if (!loadBattleSyncPrefs().autoSyncWhenLoggedIn) return
 
     const unsynced = loadLocalBattleHistory()
     if (unsynced.length === 0) return

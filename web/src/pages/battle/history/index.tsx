@@ -34,7 +34,6 @@ import {
   removeLocalBattleEntry,
   type LocalBattleHistoryEntry,
 } from '@/utils/battle-local-history'
-import { loadBattleSyncPrefs, saveBattleSyncPrefs } from '@/utils/battle-sync-prefs'
 
 type MergedRow = {
   id: string
@@ -109,13 +108,6 @@ export function BattleHistory() {
   }, [localTick])
 
   const refreshLocal = useCallback(() => setLocalTick((t) => t + 1), [])
-
-  const [prefs, setPrefs] = useState(loadBattleSyncPrefs)
-  const autoSyncWhenLoggedIn = prefs.autoSyncWhenLoggedIn
-  const setAutoSyncWhenLoggedIn = (v: boolean) => {
-    const next = saveBattleSyncPrefs({ autoSyncWhenLoggedIn: v })
-    setPrefs(next)
-  }
 
   const mergedAll = useMemo(() => mergeRows(localEntries, cloudItems), [localEntries, cloudItems])
 
@@ -255,12 +247,9 @@ export function BattleHistory() {
     }
     if (hasL) {
       return (
-        <div className="flex flex-col items-center gap-1.5">
-          <span className="inline-flex rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-800 dark:text-amber-200">
-            本地
-          </span>
-          {!user ? <span className="text-xs text-muted-foreground">登录后可同步</span> : null}
-        </div>
+        <span className="inline-flex rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-800 dark:text-amber-200">
+          本地
+        </span>
       )
     }
     if (hasC) {
@@ -298,18 +287,6 @@ export function BattleHistory() {
       <p className="text-sm text-muted-foreground">
         从列表打开对战会进入对战页查看详情；已登录且保存在你账户下的云端对战可继续追问。同步到云端后会移除本地副本。
       </p>
-
-      <div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
-        <label className="flex cursor-pointer items-center gap-2 text-sm text-foreground">
-          <input
-            type="checkbox"
-            className="h-4 w-4 rounded border-border"
-            checked={autoSyncWhenLoggedIn}
-            onChange={(e) => setAutoSyncWhenLoggedIn(e.target.checked)}
-          />
-          <span>登录后自动同步</span>
-        </label>
-      </div>
 
       <div className="flex flex-col gap-3 rounded-lg border border-border/80 bg-muted/15 p-3 sm:flex-row sm:flex-wrap sm:items-end">
         <div className="grid gap-2 sm:min-w-[10rem]">
@@ -462,9 +439,11 @@ export function BattleHistory() {
                           variant="outline"
                           size="sm"
                           className="h-8 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                          title={!user && !!row.cloud && !row.local ? '未登录无法删除云端记录' : undefined}
                           disabled={
                             deleteMutation.isPending ||
                             syncMutation.isPending ||
+                            (!user && !!row.cloud && !row.local) ||
                             (!row.local && !row.cloud)
                           }
                           onClick={() => openDeleteDialog(row)}
