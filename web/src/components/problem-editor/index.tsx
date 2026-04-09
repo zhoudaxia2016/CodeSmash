@@ -1,7 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import type { ComponentProps } from 'react'
-import { ProblemEditorHeader } from './header'
 import { ProblemEditorForm } from './form'
 
 type Props = {
@@ -9,7 +8,7 @@ type Props = {
   onOpenChange: (open: boolean) => void
   title: string
   titleId: string
-} & ComponentProps<typeof ProblemEditorForm>
+} & Omit<ComponentProps<typeof ProblemEditorForm>, 'dialogTitle' | 'dialogTitleId' | 'onClose'>
 
 export type ProblemEditorProps = Props
 
@@ -63,16 +62,15 @@ export function ProblemEditor({
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className="pointer-events-auto flex max-h-[min(92vh,820px)] w-full max-w-4xl flex-col overflow-hidden rounded-t-xl border border-border bg-card text-sm shadow-lg sm:max-h-[90vh] sm:rounded-xl"
+        className="pointer-events-auto flex h-[95vh] w-full max-w-4xl flex-col overflow-hidden rounded-t-xl border border-border bg-card text-sm shadow-lg sm:h-[90vh] sm:rounded-xl"
       >
-        <ProblemEditorHeader
-          title={title}
-          titleId={titleId}
-          onClose={() => onOpenChange(false)}
-          className="px-5 py-4"
-        />
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          <ProblemEditorForm {...formProps} />
+          <ProblemEditorForm
+            dialogTitle={title}
+            dialogTitleId={titleId}
+            onClose={() => onOpenChange(false)}
+            {...formProps}
+          />
         </div>
       </div>
     </div>,

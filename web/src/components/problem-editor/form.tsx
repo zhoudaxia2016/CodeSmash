@@ -9,6 +9,16 @@ import type {
   TestCase,
 } from '@/types'
 import { Button } from '@/components/ui/button'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { cn } from '@/lib/utils'
 import {
   buildExternalCodingPrompt,
@@ -60,6 +70,9 @@ type ProblemEditorConfirmUpdate = {
 type ProblemEditorConfirmArgs = ProblemEditorConfirmCreate | ProblemEditorConfirmUpdate
 
 type Props = {
+  dialogTitle: string
+  dialogTitleId: string
+  onClose: () => void
   mode: 'create' | 'edit'
   models: PlatformModel[]
   defaultModelId: string
@@ -118,6 +131,9 @@ function rowsToTestCaseRows(rows: ProblemEditorRow[]): TestCaseRow[] {
 }
 
 export function ProblemEditorForm({
+  dialogTitle,
+  dialogTitleId,
+  onClose,
   mode,
   models,
   defaultModelId,
@@ -144,9 +160,12 @@ export function ProblemEditorForm({
   const [verifySource, setVerifySource] = useState('')
   const [rows, setRows] = useState<ProblemEditorRow[]>([])
   const [initialTc, setInitialTc] = useState<Map<string, { data: string; ans: string }>>(new Map())
+  const [forcedDeleteIds, setForcedDeleteIds] = useState<string[]>([])
   const [llmNote, setLlmNote] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
+  const [activeTab, setActiveTab] = useState<'problem' | 'testing'>('problem')
+  const [clearDialogOpen, setClearDialogOpen] = useState(false)
 
   const { authorModelId, setAuthorModelId, suggestPending, requestSuggest } =
     useProblemAuthoringAssist(defaultModelId)
@@ -172,8 +191,10 @@ export function ProblemEditorForm({
       setVerifySource('')
       setRows([])
       setInitialTc(new Map())
+      setForcedDeleteIds([])
       setError(null)
       setLlmNote(null)
+      setActiveTab('problem')
       return
     }
     if (!detail || !problemId) return
@@ -190,6 +211,7 @@ export function ProblemEditorForm({
     setVerifySource(p.verifySource?.trim() ?? '')
     setError(null)
     setLlmNote(null)
+    setActiveTab('problem')
     const next: ProblemEditorRow[] = detail.testCases.map((tc) => ({
       key: tc.id,
       serverId: tc.id,
@@ -203,6 +225,7 @@ export function ProblemEditorForm({
       snap.set(tc.id, { data: tc.input, ans: tc.expectedOutput ?? '' })
     }
     setInitialTc(snap)
+    setForcedDeleteIds([])
   }, [mode, detail, problemId, resetKey])
 
   const formVariant = mode === 'create' ? 'create' : 'edit'
@@ -304,13 +327,32 @@ export function ProblemEditorForm({
     ])
   }
 
+  const applyClearRows = () => {
+    setRows((prev) => {
+      if (mode === 'create') return []
+      // 编辑态：直接清空 UI；保存时通过 forcedDeleteIds 一次性删除服务端用例。
+      const ids = prev
+        .filter((r) => !!r.serverId)
+        .map((r) => r.serverId as string)
+      if (ids.length > 0) {
+        setForcedDeleteIds((old) => Array.from(new Set([...old, ...ids])))
+      }
+      return []
+    })
+  }
+
+  const clearRows = () => {
+    if (rows.length === 0) return
+    setClearDialogOpen(true)
+  }
+
   const removeOrDeleteRow = (key: string) => {
     setRows((prev) => {
       const r = prev.find((x) => x.key === key)
-      if (mode === 'create' || (r && !r.serverId)) {
-        return prev.filter((x) => x.key !== key)
+      if (r?.serverId) {
+        setForcedDeleteIds((old) => (old.includes(r.serverId as string) ? old : [...old, r.serverId as string]))
       }
-      return prev.map((x) => (x.key === key ? { ...x, deleted: true } : x))
+      return prev.filter((x) => x.key !== key)
     })
   }
 
@@ -402,6 +444,10 @@ export function ProblemEditorForm({
     for (const r of rows) {
       if (r.deleted && r.serverId) testCaseDeletes.push(r.serverId)
     }
+    if (forcedDeleteIds.length > 0) {
+      for (const id of forcedDeleteIds) testCaseDeletes.push(id)
+    }
+    const uniqueDeletes = Array.from(new Set(testCaseDeletes))
     const testCaseUpdates: Array<{ testCaseId: string; data: unknown[]; ans?: unknown }> = []
     for (const r of rows) {
       if (r.deleted || !r.serverId) continue
@@ -434,7 +480,7 @@ export function ProblemEditorForm({
           gradingMode,
           verifySource: gradingMode === 'verify' ? verifySource.trim() : null,
         },
-        testCaseDeletes,
+        testCaseDeletes: uniqueDeletes,
         testCaseUpdates,
         testCaseCreates,
       })
@@ -474,7 +520,44 @@ export function ProblemEditorForm({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className={cn('min-h-0 flex-1 space-y-3 overflow-y-auto px-5 py-4 text-sm')}>
+      <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border bg-card px-5 py-3">
+        <div className="min-w-0 flex-1">
+          <h2 id={dialogTitleId} className="sr-only">
+            {dialogTitle}
+          </h2>
+          <div className="flex items-center gap-1 rounded-md bg-muted/20 p-1">
+            <Button
+              type="button"
+              size="sm"
+              variant={activeTab === 'problem' ? 'secondary' : 'ghost'}
+              className="h-8 px-3 text-xs"
+              onClick={() => setActiveTab('problem')}
+            >
+              题目信息
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant={activeTab === 'testing' ? 'secondary' : 'ghost'}
+              className="h-8 px-3 text-xs"
+              onClick={() => setActiveTab('testing')}
+            >
+              测试与判题
+            </Button>
+          </div>
+        </div>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 shrink-0"
+          onClick={onClose}
+          aria-label="关闭"
+        >
+          <X className="h-4 w-4" />
+        </Button>
+      </div>
+      <div className={cn('min-h-0 flex-1 space-y-3 overflow-hidden px-5 py-4 text-sm')}>
         {mode === 'edit' && loading && (
           <p className="text-sm text-muted-foreground">正在加载题目详情…</p>
         )}
@@ -505,154 +588,196 @@ export function ProblemEditorForm({
 
             <fieldset
               disabled={viewOnly}
-              className={cn('min-w-0 border-0 p-0', viewOnly && 'opacity-95')}
+              className={cn('flex h-full min-h-0 min-w-0 flex-col border-0 p-0', viewOnly && 'opacity-95')}
             >
-            <ProblemFormFields
-              variant={formVariant}
-              title={title}
-              onTitleChange={setTitle}
-              description={description}
-              onDescriptionChange={setDescription}
-              tags={tags}
-              onTagsChange={setTags}
-              tagSuggestions={tagSuggestions}
-              functionSignature={functionSignature}
-              onFunctionSignatureChange={setFunctionSignature}
-              entryPoint={entryPoint}
-              onEntryPointChange={setEntryPoint}
-            />
+              <div className="min-h-0 flex-1">
+                {activeTab === 'problem' && (
+                  <div className="h-full overflow-y-auto px-1">
+                    <ProblemFormFields
+                      variant={formVariant}
+                      title={title}
+                      onTitleChange={setTitle}
+                      description={description}
+                      onDescriptionChange={setDescription}
+                      tags={tags}
+                      onTagsChange={setTags}
+                      tagSuggestions={tagSuggestions}
+                      functionSignature={functionSignature}
+                      onFunctionSignatureChange={setFunctionSignature}
+                      entryPoint={entryPoint}
+                      onEntryPointChange={setEntryPoint}
+                    />
+                  </div>
+                )}
 
-            <div className="space-y-2">
-              <div>
-                <span className="text-xs font-medium text-muted-foreground">测试用例</span>
-                <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">
-                  {mode === 'edit' ? assistHintEdit : assistHintCreate}
-                </p>
-              </div>
-              {rows.length === 0 ? (
-                <p className="rounded-md border border-dashed border-border bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
-                  {mode === 'create'
-                    ? '暂无手动用例。可直接点「大模型辅助」生成，或点击下方添加。'
-                    : '暂无测试用例，可添加或使用「大模型辅助」生成。'}
-                </p>
-              ) : (
-                <ul className="space-y-2">
-                  {(() => {
-                    let n = 0
-                    return rows.map((r) => {
-                      if (r.deleted) {
-                        return (
-                          <li
-                            key={r.key}
-                            className="flex items-center justify-between gap-2 rounded-md border border-dashed border-amber-500/40 bg-amber-500/5 px-2 py-1.5 text-xs text-muted-foreground"
-                          >
-                            <span>已保存用例（已标记删除，保存后从服务器移除）</span>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              className="h-7 text-xs"
-                              onClick={() => restoreRow(r.key)}
-                            >
-                              恢复
-                            </Button>
-                          </li>
-                        )
-                      }
-                      n += 1
-                      return (
-                        <li
-                          key={r.key}
-                          className="rounded-md border border-border bg-muted/10 p-3 space-y-2"
-                        >
-                          <div className="flex items-center justify-between gap-2">
-                            <span className="text-xs font-medium text-muted-foreground">
-                              用例 {n}
-                            </span>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon"
-                              className="h-7 w-7 shrink-0 text-muted-foreground"
-                              onClick={() => removeOrDeleteRow(r.key)}
-                              aria-label="删除用例"
-                            >
-                              {mode === 'edit' && r.serverId ? (
-                                <Trash2 className="h-3.5 w-3.5" />
-                              ) : (
-                                <X className="h-3.5 w-3.5" />
+                {activeTab === 'testing' && (
+                  <div className="flex h-full min-h-0 flex-col gap-3 overflow-hidden px-1">
+                  <div className="flex min-h-0 flex-1 flex-col space-y-2">
+                    <div>
+                      <span className="text-xs font-medium text-muted-foreground">测试用例</span>
+                      <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">
+                        {mode === 'edit' ? assistHintEdit : assistHintCreate}
+                      </p>
+                    </div>
+                    {rows.length === 0 ? (
+                      <p className="rounded-md border border-dashed border-border bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
+                        {mode === 'create'
+                          ? '暂无手动用例。可直接点「大模型辅助」生成，或点击下方添加。'
+                          : '暂无测试用例，可添加或使用「大模型辅助」生成。'}
+                      </p>
+                    ) : (
+                      <div className="min-h-0 flex-1 overflow-auto rounded-md border border-border">
+                        <table className="min-w-full border-collapse text-xs">
+                          <thead className="bg-muted/40">
+                            <tr className="border-b border-border text-muted-foreground">
+                              <th className="w-14 px-2 py-2 text-left font-medium">#</th>
+                              <th className="min-w-[22rem] px-2 py-2 text-left font-medium">
+                                测试输入（JSON 数组）
+                              </th>
+                              {gradingMode === 'expected' && (
+                                <th className="min-w-[18rem] px-2 py-2 text-left font-medium">
+                                  标准答案（JSON）
+                                </th>
                               )}
-                            </Button>
-                          </div>
-                          <label className="block space-y-1">
-                            <span className="text-[11px] text-muted-foreground">
-                              测试输入（JSON 数组）
-                            </span>
-                            <textarea
-                              className="min-h-[3rem] w-full rounded-md border border-input bg-background px-2 py-1.5 font-mono text-xs text-foreground"
-                              value={r.data}
-                              onChange={(e) => updateRow(r.key, { data: e.target.value })}
-                              placeholder={
-                                mode === 'create'
-                                  ? '例如 [[2,7,11,15], 9] 表示两个参数'
-                                  : undefined
-                              }
-                              rows={2}
-                            />
-                          </label>
-                          {gradingMode === 'expected' && (
-                            <label className="block space-y-1">
-                              <span className="text-[11px] text-muted-foreground">
-                                标准答案（JSON 数组：每项为一条可接受返回值）
-                              </span>
-                              <textarea
-                                className="min-h-[2.5rem] w-full rounded-md border border-input bg-background px-2 py-1.5 font-mono text-xs text-foreground"
-                                value={r.ans}
-                                onChange={(e) => updateRow(r.key, { ans: e.target.value })}
-                                placeholder={
-                                  mode === 'create'
-                                    ? '例如 [[0,1]] 单解；多解 [1,2] 或 [[0,3],[1,2]]'
-                                    : undefined
+                              <th className="w-28 px-2 py-2 text-right font-medium">操作</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {(() => {
+                              let n = 0
+                              return rows.map((r) => {
+                                if (r.deleted) {
+                                  return (
+                                    <tr key={r.key} className="border-b border-border/60 bg-amber-500/5">
+                                      <td colSpan={gradingMode === 'expected' ? 4 : 3} className="px-2 py-2">
+                                        <div className="flex items-center justify-between gap-2 text-muted-foreground">
+                                          <span>已保存用例（已标记删除，保存后从服务器移除）</span>
+                                          <Button
+                                            type="button"
+                                            variant="ghost"
+                                            size="sm"
+                                            className="h-7 text-xs"
+                                            onClick={() => restoreRow(r.key)}
+                                          >
+                                            恢复
+                                          </Button>
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  )
                                 }
-                                rows={2}
-                              />
-                            </label>
-                          )}
-                        </li>
-                      )
-                    })
-                  })()}
-                </ul>
-              )}
-              {!viewOnly && (
-                <Button type="button" variant="outline" size="sm" className="gap-1" onClick={addRow}>
-                  <Plus className="h-3.5 w-3.5" />
-                  添加用例
-                </Button>
-              )}
-            </div>
+                                n += 1
+                                return (
+                                  <tr key={r.key} className="border-b border-border/60 align-top">
+                                      <td className="px-2 py-2 align-middle text-muted-foreground">{n}</td>
+                                      <td className="px-2 py-2">
+                                        <textarea
+                                          className="h-8 w-full resize-none overflow-x-auto whitespace-pre rounded-md border border-input bg-background px-2 py-1 font-mono text-xs text-foreground"
+                                          value={r.data}
+                                          onChange={(e) => updateRow(r.key, { data: e.target.value })}
+                                          placeholder={
+                                            mode === 'create'
+                                              ? '例如 [[2,7,11,15], 9] 表示两个参数'
+                                              : undefined
+                                          }
+                                          rows={1}
+                                        />
+                                      </td>
+                                      {gradingMode === 'expected' && (
+                                        <td className="px-2 py-2">
+                                          <textarea
+                                            className="h-8 w-full resize-none overflow-x-auto whitespace-pre rounded-md border border-input bg-background px-2 py-1 font-mono text-xs text-foreground"
+                                            value={r.ans}
+                                            onChange={(e) => updateRow(r.key, { ans: e.target.value })}
+                                            placeholder={
+                                              mode === 'create'
+                                                ? '例如 [[0,1]] 或 [[0,3],[1,2]]'
+                                                : undefined
+                                            }
+                                            rows={1}
+                                          />
+                                        </td>
+                                      )}
+                                      <td className="px-2 py-2">
+                                        <div className="flex items-center justify-end gap-1">
+                                          <Button
+                                            type="button"
+                                            variant="ghost"
+                                            size="icon"
+                                            className="h-7 w-7 shrink-0 text-muted-foreground"
+                                            onClick={() => removeOrDeleteRow(r.key)}
+                                            aria-label="删除用例"
+                                          >
+                                            <Trash2 className="h-3.5 w-3.5" />
+                                          </Button>
+                                        </div>
+                                      </td>
+                                    </tr>
+                                )
+                              })
+                            })()}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                    {!viewOnly && (
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Button type="button" variant="outline" size="sm" className="gap-1" onClick={addRow}>
+                          <Plus className="h-3.5 w-3.5" />
+                          添加用例
+                        </Button>
+                        <Button type="button" variant="outline" size="sm" onClick={clearRows}>
+                          清空用例
+                        </Button>
+                      </div>
+                    )}
+                    <AlertDialog open={clearDialogOpen} onOpenChange={setClearDialogOpen}>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>清空测试用例</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            确定清空当前测试用例吗？此操作在保存后生效。
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>取消</AlertDialogCancel>
+                          <AlertDialogAction
+                            onClick={() => {
+                              applyClearRows()
+                              setClearDialogOpen(false)
+                            }}
+                          >
+                            确认清空
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                  </div>
 
-            <div className="space-y-3">
-              <ProblemGradingBlock
-                gradingMode={gradingMode}
-                onGradingModeChange={setGradingMode}
-                verifySource={verifySource}
-                onVerifySourceChange={setVerifySource}
-                verifyMinHeightClass={mode === 'edit' ? 'min-h-[6rem]' : undefined}
-              />
-            </div>
+                  <div className="space-y-3">
+                    <ProblemGradingBlock
+                      gradingMode={gradingMode}
+                      onGradingModeChange={setGradingMode}
+                      verifySource={verifySource}
+                      onVerifySourceChange={setVerifySource}
+                      verifyMinHeightClass={mode === 'edit' ? 'min-h-[6rem]' : undefined}
+                    />
+                  </div>
+                  {!viewOnly && (
+                    <ProblemAuthoringAssistPanel
+                      models={models}
+                      authorModelId={authorModelId}
+                      onAuthorModelIdChange={setAuthorModelId}
+                      assistGradingFromForm={assistGradingFromForm}
+                      onAssistGradingFromFormChange={setAssistGradingFromForm}
+                      onSuggest={mode === 'create' ? handleSuggestCreate : handleSuggestEdit}
+                      pending={suggestPending}
+                    />
+                  )}
+                  </div>
+                )}
+              </div>
             </fieldset>
-            {!viewOnly && (
-            <ProblemAuthoringAssistPanel
-              models={models}
-              authorModelId={authorModelId}
-              onAuthorModelIdChange={setAuthorModelId}
-              assistGradingFromForm={assistGradingFromForm}
-              onAssistGradingFromFormChange={setAssistGradingFromForm}
-              onSuggest={mode === 'create' ? handleSuggestCreate : handleSuggestEdit}
-              pending={suggestPending}
-            />
-            )}
           </>
         )}
       </div>
