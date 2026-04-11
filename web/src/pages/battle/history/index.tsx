@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { ProblemEditor, type ProblemEditorProps } from '@/components/problem-editor'
 import {
   AlertDialog,
@@ -28,7 +29,6 @@ import {
 } from '@/hooks/useApi'
 import { defaultAuthoringModelId } from '@/lib/authoring-model'
 import type { BattleResultListItem, BattleSession } from '@/types'
-import { useBattleDetailNav } from '@/context/battle-replay-nav'
 import {
   loadLocalBattleHistory,
   removeLocalBattleEntry,
@@ -93,7 +93,11 @@ function outcomeLabel(cloud: BattleResultListItem | undefined, battle: BattleSes
 type StorageFilter = 'all' | 'local' | 'cloud'
 
 export function BattleHistory() {
-  const { openBattleDetail } = useBattleDetailNav()
+  const navigate = useNavigate()
+  const openBattleDetail = (battleId: string) => {
+    navigate(`/battle?battle=${battleId}`)
+  }
+  
   const { data: meData } = useMe()
   const user = meData?.user ?? null
   const { data: models = [] } = useModels()

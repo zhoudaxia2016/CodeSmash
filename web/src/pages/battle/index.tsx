@@ -2,6 +2,7 @@ import { useState, useEffect, useLayoutEffect, useMemo, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { ChevronDown } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
+import { useOutletContext, useSearchParams } from 'react-router-dom'
 import { api } from '@/api/client'
 import { useMe, useProblem, useStartBattle, useBattle, useBattleResultDetail } from '@/hooks/useApi'
 import { usePersistProblemEditorUpdate } from '@/hooks/usePersistProblemEditorUpdate'
@@ -49,17 +50,16 @@ function applyBattleSessionToHeaderSelections(
 
 const HEADER_SLOT_ID = 'battle-header-slot'
 
-export function Battle({
-  models,
-  problems,
-  openBattleDetailId,
-  onClearOpenBattleDetail,
-}: {
-  models: PlatformModel[]
-  problems: Problem[]
-  openBattleDetailId: string | null
-  onClearOpenBattleDetail: () => void
-}) {
+export function Battle() {
+  const { models, problems } = useOutletContext<{ models: PlatformModel[]; problems: Problem[] }>()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const openBattleDetailId = searchParams.get('battle')
+  const onClearOpenBattleDetail = () => {
+    const newSearchParams = new URLSearchParams(searchParams)
+    newSearchParams.delete('battle')
+    setSearchParams(newSearchParams, { replace: true })
+  }
+  
   const queryClient = useQueryClient()
   const { data: meData } = useMe()
   const currentUser = meData?.user ?? null
