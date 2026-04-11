@@ -1,5 +1,5 @@
 import { Sparkles } from 'lucide-react'
-import type { PlatformModel } from '@/types'
+import type { GradingMode, PlatformModel } from '@/types'
 import { Button } from '@/components/ui/button'
 
 type Props = {
@@ -9,6 +9,16 @@ type Props = {
   /** 勾选＝辅助采用表单「标准答案 / 验证函数」；不勾选＝由模型自选判题方式。 */
   assistGradingFromForm: boolean
   onAssistGradingFromFormChange: (value: boolean) => void
+  /** 生成模式：create（生成新用例）、append（追加用例）、fix（修正答案）。 */
+  authoringMode: 'create' | 'append' | 'fix'
+  onAuthoringModeChange: (mode: 'create' | 'append' | 'fix') => void
+  /** 目标用例数。 */
+  targetCount: number
+  onTargetCountChange: (count: number) => void
+  /** 现有用例数。 */
+  existingCount: number
+  /** 当前判题模式。 */
+  gradingMode: GradingMode
   onSuggest: () => void
   pending: boolean
 }
@@ -20,9 +30,18 @@ export function ProblemAuthoringAssistPanel({
   onAuthorModelIdChange,
   assistGradingFromForm,
   onAssistGradingFromFormChange,
+  authoringMode,
+  onAuthoringModeChange,
+  targetCount,
+  onTargetCountChange,
+  existingCount,
+  gradingMode,
   onSuggest,
   pending,
 }: Props) {
+  const canUseFixMode = gradingMode === 'expected'
+  const isFixMode = authoringMode === 'fix'
+
   return (
     <div className="space-y-2 border-t border-border pt-3">
       <div className="flex flex-wrap items-end gap-2">
@@ -52,25 +71,78 @@ export function ProblemAuthoringAssistPanel({
           {pending ? '生成中…' : '大模型辅助'}
         </Button>
       </div>
-      <label className="flex cursor-pointer items-start gap-2 text-[11px] leading-snug text-foreground">
-        <input
-          type="checkbox"
-          className="mt-0.5 h-3.5 w-3.5 shrink-0 rounded border-input"
-          checked={assistGradingFromForm}
-          onChange={(e) => onAssistGradingFromFormChange(e.target.checked)}
-        />
-        <span>
-          <span className="font-medium text-foreground/90">辅助与表单判题一致</span>
-          <span className="text-muted-foreground">
-            {' '}
-            — 勾选后采用上方「标准答案 / 验证函数」；不勾选则由模型根据题意自选。
-          </span>
-        </span>
-      </label>
-      <p className="text-[11px] leading-relaxed text-muted-foreground">
-        <span className="font-medium text-foreground/90">大模型辅助：</span>
-        通常只需写好题干即可；标签与用例可留空。用例也可先手写几条再让模型补全判题方式。保存前请人工核对。
-      </p>
+      
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs">
+        <div className="flex items-center gap-3">
+          <label className="flex cursor-pointer items-center gap-1.5">
+            <input
+              type="radio"
+              name="authoringMode"
+              value="create"
+              checked={authoringMode === 'create'}
+              onChange={() => onAuthoringModeChange('create')}
+              className="h-3.5 w-3.5"
+            />
+            <span>生成新用例</span>
+          </label>
+          <label className="flex cursor-pointer items-center gap-1.5">
+            <input
+              type="radio"
+              name="authoringMode"
+              value="append"
+              checked={authoringMode === 'append'}
+              onChange={() => onAuthoringModeChange('append')}
+              className="h-3.5 w-3.5"
+            />
+            <span>追加用例</span>
+          </label>
+          <label className={`flex cursor-pointer items-center gap-1.5 ${!canUseFixMode ? 'opacity-50' : ''}`}>
+            <input
+              type="radio"
+              name="authoringMode"
+              value="fix"
+              checked={authoringMode === 'fix'}
+              onChange={() => canUseFixMode && onAuthoringModeChange('fix')}
+              disabled={!canUseFixMode}
+              className="h-3.5 w-3.5"
+            />
+            <span>修正答案{!canUseFixMode && ' (仅标准答案模式)'}</span>
+          </label>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <label className="flex items-center gap-1">
+            <span className="text-muted-foreground">
+              {isFixMode ? '重算：' : authoringMode === 'append' ? '追加：' : '目标：'}
+            </span>
+            <input
+              type="number"
+              min={1}
+              max={20}
+              value={isFixMode ? existingCount : targetCount}
+              onChange={(e) => {
+                if (isFixMode) return
+                const val = parseInt(e.target.value) || 1
+                onTargetCountChange(Math.min(20, Math.max(1, val)))
+              }}
+              disabled={isFixMode}
+              className="h-7 w-16 rounded border border-input bg-background px-2 text-xs disabled:opacity-50"
+            />
+            <span>条</span>
+          </label>
+        </div>
+
+        <label className={`flex cursor-pointer items-center gap-1.5 ${isFixMode ? 'opacity-50' : ''}`}>
+          <input
+            type="checkbox"
+            className="h-3.5 w-3.5 shrink-0 rounded border-input"
+            checked={isFixMode ? true : assistGradingFromForm}
+            onChange={(e) => !isFixMode && onAssistGradingFromFormChange(e.target.checked)}
+            disabled={isFixMode}
+          />
+          <span className="text-muted-foreground">与表单一致</span>
+        </label>
+      </div>
     </div>
   )
 }

@@ -64,13 +64,19 @@ problemsRouter.post('/authoring', async (c) => {
   const body = await c.req.json() as {
     title?: string
     functionSignature?: string
-    testCasesData?: unknown[][]
+    testCasesData?: Array<{ data: unknown[] }>
     description?: string
     tags?: string[]
     modelId?: string
     /** 为 true 时命题辅助与表单判题方式（formGradingMode）一致。 */
     assistGradingFromForm?: boolean
     formGradingMode?: 'expected' | 'verify'
+    /** 生成模式：create（生成新用例）、append（追加用例）、fix（修正答案）。 */
+    authoringMode?: 'create' | 'append' | 'fix'
+    /** 目标用例数（create/append 模式需要）。 */
+    targetCount?: number
+    /** 现有用例数（append 模式需要）。 */
+    existingCount?: number
   }
 
   if (!body.description?.trim() && !body.title?.trim()) {
@@ -79,12 +85,13 @@ problemsRouter.post('/authoring', async (c) => {
       message: '请至少填写题目描述或标题后再使用大模型辅助',
     }, 400)
   }
+
   const testCasesData = Array.isArray(body.testCasesData) ? body.testCasesData : []
   for (const row of testCasesData) {
-    if (!Array.isArray(row)) {
+    if (!row || typeof row !== 'object' || !Array.isArray(row.data)) {
       return c.json({
-        error: 'testCasesData must be an array of arrays',
-        message: 'testCasesData 须为二维数组',
+        error: 'testCasesData must be an array of { data: unknown[] }',
+        message: 'testCasesData 格式错误',
       }, 400)
     }
   }
@@ -106,6 +113,9 @@ problemsRouter.post('/authoring', async (c) => {
     const assistGradingFromForm = body.assistGradingFromForm === true
     const formGradingMode: 'expected' | 'verify' =
       body.formGradingMode === 'verify' ? 'verify' : 'expected'
+    const authoringMode = body.authoringMode || 'append'
+    const targetCount = body.targetCount || 5
+    const existingCount = body.existingCount || 0
 
     const parsed = await generateProblemAuthoring(
       cfg.provider,
@@ -114,10 +124,13 @@ problemsRouter.post('/authoring', async (c) => {
         title: body.title?.trim() || undefined,
         description: body.description?.trim() || undefined,
         functionSignature: body.functionSignature?.trim() || undefined,
-        testCasesData: testCasesData as unknown[][],
+        testCasesData: testCasesData.map(t => t.data),
         tags: body.tags,
         formGradingMode,
         assistGradingFromForm,
+        authoringMode,
+        targetCount,
+        existingCount,
       },
       { source: 'problem_authoring', sourceId: null },
     )

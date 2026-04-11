@@ -25,23 +25,38 @@ export function useProblemAuthoringAssist(defaultModelId: string) {
       gradingMode: GradingMode
       /** 勾选「辅助与表单判题一致」时为 true。 */
       assistGradingFromForm: boolean
+      /** 生成模式：create（生成新用例）、append（追加用例）、fix（修正答案）。 */
+      authoringMode: 'create' | 'append' | 'fix'
+      /** 目标用例数（create/append 模式需要）。 */
+      targetCount: number
+      /** 现有用例数（append 模式需要）。 */
+      existingCount: number
       setError: (msg: string | null) => void
-      setLlmNote: (msg: string | null) => void
       onSuccess: (data: ProblemAuthoringResponse) => void
     }) => {
       input.setError(null)
-      input.setLlmNote(null)
-      let testCasesData: unknown[][]
-      try {
-        testCasesData = parseRowsToTestCases(input.testCaseRows, 'verify').data
-      } catch (e) {
-        input.setError(e instanceof Error ? e.message : '解析失败')
-        return
-      }
+      
       if (!input.description.trim() && !input.title.trim()) {
         input.setError('请先填写题目描述（或标题），再使用大模型辅助')
         return
       }
+
+      if (input.authoringMode === 'fix' && input.gradingMode !== 'expected') {
+        input.setError('修正答案模式仅支持标准答案模式')
+        return
+      }
+
+      let testCasesData: Array<{ data: unknown[] }> | undefined
+      if (input.authoringMode !== 'create') {
+        try {
+          const parsed = parseRowsToTestCases(input.testCaseRows, input.gradingMode)
+          testCasesData = parsed.data.map(d => ({ data: d }))
+        } catch (e) {
+          input.setError(e instanceof Error ? e.message : '解析失败')
+          return
+        }
+      }
+
       suggest.mutate(
         {
           title: input.title.trim() || undefined,
@@ -52,13 +67,13 @@ export function useProblemAuthoringAssist(defaultModelId: string) {
           modelId: authorModelId,
           formGradingMode: input.gradingMode,
           assistGradingFromForm: input.assistGradingFromForm,
+          authoringMode: input.authoringMode,
+          targetCount: input.authoringMode !== 'fix' ? input.targetCount : undefined,
+          existingCount: input.authoringMode === 'append' ? input.existingCount : undefined,
         },
         {
           onSuccess: (data) => {
-            const baseNote =
-              data.reasoning?.trim() || '已根据模型输出更新表单，请人工核对后再保存。'
             input.onSuccess(data)
-            input.setLlmNote(baseNote)
           },
           onError: (e) => {
             const msg = e instanceof Error ? e.message : 'LLM 调用失败'

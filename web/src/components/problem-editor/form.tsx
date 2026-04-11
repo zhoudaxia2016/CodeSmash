@@ -156,11 +156,12 @@ export function ProblemEditorForm({
   const [entryPoint, setEntryPoint] = useState('')
   const [gradingMode, setGradingMode] = useState<GradingMode>('expected')
   const [assistGradingFromForm, setAssistGradingFromForm] = useState(false)
+  const [authoringMode, setAuthoringMode] = useState<'create' | 'append' | 'fix'>('append')
+  const [targetCount, setTargetCount] = useState(5)
   const [verifySource, setVerifySource] = useState('')
   const [rows, setRows] = useState<ProblemEditorRow[]>([])
   const [initialTc, setInitialTc] = useState<Map<string, { data: string; ans: string }>>(new Map())
   const [forcedDeleteIds, setForcedDeleteIds] = useState<string[]>([])
-  const [llmNote, setLlmNote] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
   const [activeTab, setActiveTab] = useState<'problem' | 'testing'>('problem')
@@ -192,7 +193,6 @@ export function ProblemEditorForm({
       setInitialTc(new Map())
       setForcedDeleteIds([])
       setError(null)
-      setLlmNote(null)
       setActiveTab('problem')
       return
     }
@@ -209,7 +209,6 @@ export function ProblemEditorForm({
     setAssistGradingFromForm(false)
     setVerifySource(p.verifySource?.trim() ?? '')
     setError(null)
-    setLlmNote(null)
     setActiveTab('problem')
     const next: ProblemEditorRow[] = detail.testCases.map((tc) => ({
       key: tc.id,
@@ -234,8 +233,12 @@ export function ProblemEditorForm({
     '每条用例：测试输入为 JSON 数组；标准答案模式再填标准答案。留空行保存时跳过；也可先不填再用大模型辅助。'
 
   const applyAuthoringGradingFields = (data: ProblemAuthoringResponse) => {
-    setEntryPoint(data.entryPoint)
-    setGradingMode(data.gradingMode)
+    if (data.entryPoint?.trim()) {
+      setEntryPoint(data.entryPoint.trim())
+    }
+    if (data.gradingMode) {
+      setGradingMode(data.gradingMode)
+    }
     if (data.gradingMode === 'verify') {
       setVerifySource(typeof data.verifySource === 'string' ? data.verifySource : '')
     } else {
@@ -252,22 +255,71 @@ export function ProblemEditorForm({
       testCaseRows: rowsToTestCaseRows(rows),
       gradingMode,
       assistGradingFromForm,
+      authoringMode,
+      targetCount,
+      existingCount: rows.length,
       setError,
-      setLlmNote,
       onSuccess: (data) => {
-        if (data.title?.trim()) setTitle(data.title.trim())
-        if (data.functionSignature?.trim()) setFunctionSignature(data.functionSignature.trim())
-        applyAuthoringGradingFields(data)
-        setRows(
-          data.testCases.map((t) => ({
-            key: `new-${crypto.randomUUID()}`,
-            data: JSON.stringify(t.data),
-            ans:
-              data.gradingMode === 'expected' && t.ans !== undefined
-                ? JSON.stringify(t.ans)
-                : '',
-          })),
-        )
+        if (authoringMode !== 'fix') {
+          if (data.title?.trim()) setTitle(data.title.trim())
+          if (data.functionSignature?.trim()) setFunctionSignature(data.functionSignature.trim())
+          applyAuthoringGradingFields(data)
+        }
+        
+        if (authoringMode === 'create') {
+          setRows(
+            data.testCases.map((t) => ({
+              key: `new-${crypto.randomUUID()}`,
+              data: JSON.stringify(t.data),
+              ans:
+                data.gradingMode === 'expected' && t.ans !== undefined
+                  ? JSON.stringify(t.ans)
+                  : '',
+            })),
+          )
+        } else if (authoringMode === 'append') {
+          const existing = new Set<string>()
+          for (const r of rows) {
+            const k = normalizeDataKey(r.data)
+            if (k) existing.add(k)
+          }
+          const toAdd: ProblemEditorRow[] = []
+          for (const t of data.testCases) {
+            const k = JSON.stringify(t.data)
+            if (existing.has(k)) continue
+            existing.add(k)
+            toAdd.push({
+              key: `new-${crypto.randomUUID()}`,
+              data: JSON.stringify(t.data),
+              ans:
+                data.gradingMode === 'expected' && t.ans !== undefined
+                  ? JSON.stringify(t.ans)
+                  : '',
+            })
+          }
+          if (toAdd.length > 0) {
+            setRows((prev) => [...prev, ...toAdd])
+          }
+        } else if (authoringMode === 'fix') {
+          const answerMap = new Map(
+            data.testCases.map(t => [JSON.stringify(t.data), t.ans])
+          )
+          
+          setRows(prev => {
+            return prev.map(row => {
+              const key = normalizeDataKey(row.data)
+              const newAns = key ? answerMap.get(key) : undefined
+              
+              if (newAns !== undefined) {
+                return {
+                  ...row,
+                  ans: JSON.stringify(newAns)
+                }
+              }
+              return row
+            })
+          })
+        }
       },
     })
   }
@@ -281,37 +333,76 @@ export function ProblemEditorForm({
       testCaseRows: rowsToTestCaseRows(rows),
       gradingMode,
       assistGradingFromForm,
+      authoringMode,
+      targetCount,
+      existingCount: rows.length,
       setError,
-      setLlmNote,
       onSuccess: (data) => {
-        applyAuthoringGradingFields(data)
-        if (data.title?.trim()) setTitle(data.title.trim())
-        if (data.functionSignature?.trim()) setFunctionSignature(data.functionSignature.trim())
+        if (authoringMode !== 'fix') {
+          applyAuthoringGradingFields(data)
+          if (data.title?.trim()) setTitle(data.title.trim())
+          if (data.functionSignature?.trim()) setFunctionSignature(data.functionSignature.trim())
+        }
 
-        const existing = new Set<string>()
-        for (const r of rows) {
-          const k = normalizeDataKey(r.data)
-          if (k) existing.add(k)
-        }
-        const toAdd: ProblemEditorRow[] = []
-        for (const t of data.testCases) {
-          const k = JSON.stringify(t.data)
-          if (existing.has(k)) continue
-          existing.add(k)
-          toAdd.push({
-            key: `new-${crypto.randomUUID()}`,
-            data: JSON.stringify(t.data),
-            ans:
-              data.gradingMode === 'expected' && t.ans !== undefined
-                ? JSON.stringify(t.ans)
-                : '',
+        if (authoringMode === 'create') {
+          setRows(
+            data.testCases.map((t) => ({
+              key: `new-${crypto.randomUUID()}`,
+              data: JSON.stringify(t.data),
+              ans:
+                data.gradingMode === 'expected' && t.ans !== undefined
+                  ? JSON.stringify(t.ans)
+                  : '',
+            })),
+          )
+          const ids = rows
+            .filter((r) => !!r.serverId)
+            .map((r) => r.serverId as string)
+          if (ids.length > 0) {
+            setForcedDeleteIds((old) => Array.from(new Set([...old, ...ids])))
+          }
+        } else if (authoringMode === 'append') {
+          const existing = new Set<string>()
+          for (const r of rows) {
+            const k = normalizeDataKey(r.data)
+            if (k) existing.add(k)
+          }
+          const toAdd: ProblemEditorRow[] = []
+          for (const t of data.testCases) {
+            const k = JSON.stringify(t.data)
+            if (existing.has(k)) continue
+            existing.add(k)
+            toAdd.push({
+              key: `new-${crypto.randomUUID()}`,
+              data: JSON.stringify(t.data),
+              ans:
+                data.gradingMode === 'expected' && t.ans !== undefined
+                  ? JSON.stringify(t.ans)
+                  : '',
+            })
+          }
+          if (toAdd.length > 0) {
+            setRows((prev) => [...prev, ...toAdd])
+          }
+        } else if (authoringMode === 'fix') {
+          const answerMap = new Map(
+            data.testCases.map(t => [JSON.stringify(t.data), t.ans])
+          )
+          
+          setRows(prev => {
+            return prev.map(row => {
+              const key = normalizeDataKey(row.data)
+              const newAns = key ? answerMap.get(key) : undefined
+              
+              if (newAns !== undefined) {
+                return {
+                  ...row,
+                  ans: JSON.stringify(newAns)
+                }
+              }
+              return row
+            })
           })
-        }
-        if (toAdd.length === 0) {
-          setLlmNote(data.reasoning?.trim() || '模型未返回新的用例（可能与现有重复）。')
-        } else {
-          setRows((prev) => [...prev, ...toAdd])
-          setLlmNote(data.reasoning?.trim() || `已追加 ${toAdd.length} 条用例，请核对后再保存。`)
         }
       },
     })
@@ -565,11 +656,6 @@ export function ProblemEditorForm({
                 {error}
               </p>
             )}
-            {llmNote && (
-              <p className="rounded-md border border-border bg-muted/40 px-2 py-1.5 text-xs text-muted-foreground">
-                模型说明：{llmNote}
-              </p>
-            )}
 
             <fieldset
               disabled={viewOnly}
@@ -596,7 +682,7 @@ export function ProblemEditorForm({
                 )}
 
                 {activeTab === 'testing' && (
-                  <div className="flex h-full min-h-0 flex-col gap-3 overflow-hidden px-1">
+                  <div className="flex h-full min-h-0 flex-col gap-3 overflow-y-auto px-1">
                   <div className="flex min-h-0 flex-1 flex-col space-y-2">
                     <div>
                       <span className="text-xs font-medium text-muted-foreground">测试用例</span>
@@ -735,6 +821,12 @@ export function ProblemEditorForm({
                       onAuthorModelIdChange={setAuthorModelId}
                       assistGradingFromForm={assistGradingFromForm}
                       onAssistGradingFromFormChange={setAssistGradingFromForm}
+                      authoringMode={authoringMode}
+                      onAuthoringModeChange={setAuthoringMode}
+                      targetCount={targetCount}
+                      onTargetCountChange={setTargetCount}
+                      existingCount={rows.length}
+                      gradingMode={gradingMode}
                       onSuggest={mode === 'create' ? handleSuggestCreate : handleSuggestEdit}
                       pending={suggestPending}
                     />

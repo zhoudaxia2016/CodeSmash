@@ -219,8 +219,8 @@ export type ProblemGradingContext = Pick<Problem, 'entryPoint' | 'gradingMode' |
 export type ProblemAuthoringResponse = {
   title?: string
   functionSignature?: string
-  entryPoint: string
-  gradingMode: GradingMode
+  entryPoint?: string
+  gradingMode?: GradingMode
   testCases: Array<{ data: unknown[]; ans?: unknown }>
   verifySource?: string | null
   reasoning?: string

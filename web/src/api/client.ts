@@ -182,13 +182,19 @@ export const api = {
     title?: string
     description?: string
     functionSignature?: string
-    testCasesData?: unknown[][]
+    testCasesData?: Array<{ data: unknown[] }>
     tags?: string[]
     modelId?: string
     /** 当前表单判题方式（与是否强制无关，便于服务端与调试）。 */
     formGradingMode?: import('../types').GradingMode
     /** 为 true 时辅助与表单判题方式（formGradingMode）一致。 */
     assistGradingFromForm?: boolean
+    /** 生成模式：create（生成新用例）、append（追加用例）、fix（修正答案）。 */
+    authoringMode?: 'create' | 'append' | 'fix'
+    /** 目标用例数（create/append 模式需要）。 */
+    targetCount?: number
+    /** 现有用例数（append 模式需要）。 */
+    existingCount?: number
   }): Promise<import('../types').ProblemAuthoringResponse> {
     const res = await apiFetch(`${API_BASE}/problems/authoring`, {
       method: 'POST',

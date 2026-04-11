@@ -1010,24 +1010,169 @@ function buildProblemAuthoringSystemContent(input: {
   assistGradingFromForm: boolean
   formGradingMode: 'expected' | 'verify'
   expectedAlternativesBeforeVerify: number
+  authoringMode: 'create' | 'append' | 'fix'
+  targetCount: number
+  existingCount: number
 }): string {
-  let suffix: string
-  if (input.assistGradingFromForm) {
-    suffix =
-      input.formGradingMode === 'verify'
-        ? PROBLEM_AUTHORING_SYSTEM_ENFORCE_VERIFY
-        : PROBLEM_AUTHORING_SYSTEM_ENFORCE_EXPECTED
-  } else {
-    suffix = problemAuthoringSystemFreeChoice(input.expectedAlternativesBeforeVerify)
+  const { assistGradingFromForm, formGradingMode, authoringMode, targetCount, existingCount } = input
+
+  let taskSection = ''
+  let gradingSection = ''
+  let outputSection = ''
+
+  if (authoringMode === 'create') {
+    taskSection = `## 生成任务
+
+生成 ${targetCount} 条测试用例。`
+  } else if (authoringMode === 'append') {
+    taskSection = `## 生成任务
+
+在现有 ${existingCount} 条用例基础上，追加 ${targetCount} 条新用例。
+请避免生成与现有用例重复的输入。`
+  } else if (authoringMode === 'fix') {
+    taskSection = `## 生成任务
+
+修正答案模式：保持现有用例的输入不变，重新生成答案。`
   }
-  return `${PROBLEM_AUTHORING_SYSTEM_BASE}\n\n${suffix}`
+
+  if (authoringMode === 'fix') {
+    gradingSection = `## 判题模式
+
+固定使用对答案表模式：每个用例必须提供 ans 字段。`
+  } else if (assistGradingFromForm) {
+    if (formGradingMode === 'expected') {
+      gradingSection = `## 判题模式
+
+固定使用对答案表模式：每个用例必须提供 ans 字段。`
+    } else {
+      gradingSection = `## 判题模式
+
+固定使用自定义验证函数模式：提供验证函数，不需要 ans 字段。`
+    }
+  } else {
+    gradingSection = `## 判题模式选择
+
+请在以下两种判题模式中选择一种：
+
+### 模式 A：对答案表
+- 每个用例提供标准答案
+- 适用场景：答案唯一或有限个可枚举值
+- 输出格式：
+  \`\`\`json
+  {
+    "testCases": [
+      {
+        "data": [参数数组],
+        "ans": [答案数组]
+      }
+    ]
+  }
+  \`\`\`
+
+### 模式 B：自定义验证函数
+- 提供一个验证函数，判断选手答案是否正确
+- 适用场景：答案有浮点容差、无序结果、多解不好列表、所有用例的可接受结果总数 > ${input.expectedAlternativesBeforeVerify}
+- 输出格式：
+  \`\`\`json
+  {
+    "testCases": [
+      {
+        "data": [参数数组]
+      }
+    ],
+    "verifySource": "function verify(...args, candidate) { return true/false; }"
+  }
+  \`\`\``
+  }
+
+  if (authoringMode === 'fix') {
+    outputSection = `## 输出格式
+
+\`\`\`json
+{
+  "testCases": [
+    {
+      "data": [参数数组],
+      "ans": [答案数组]
+    }
+  ],
+  "reasoning": "string (可选)"
+}
+\`\`\`
+
+**注意**：必须保持与输入相同的顺序和 data 字段。`
+  } else if (authoringMode === 'append') {
+    outputSection = `## 输出格式
+
+\`\`\`json
+{
+  "title": "string (可选)",
+  "functionSignature": "string (可选)",
+  "entryPoint": "string (必需)",
+  "gradingMode": "expected 或 verify",
+  "testCases": [
+    {
+      "data": [参数数组],
+      "ans": [答案数组] (仅模式A)
+    }
+  ],
+  "verifySource": "string (仅模式B)",
+  "reasoning": "string (可选)"
+}
+\`\`\`
+
+**注意**：testCases 只需要包含新增的用例，不要包含现有用例。`
+  } else {
+    outputSection = `## 输出格式
+
+\`\`\`json
+{
+  "title": "string (可选，补充或修正标题)",
+  "functionSignature": "string (可选，补充或修正签名)",
+  "entryPoint": "string (必需，入口函数名)",
+  "gradingMode": "expected 或 verify",
+  "testCases": [
+    {
+      "data": [参数数组],
+      "ans": [答案数组] (仅模式A)
+    }
+  ],
+  "verifySource": "string (仅模式B)",
+  "reasoning": "string (可选，说明)"
+}
+\`\`\``
+  }
+
+  const fieldSection = `## 字段说明
+
+### data 字段
+- 类型：数组
+- 说明：函数输入参数，按函数签名参数顺序排列
+- 示例：\`[1, 2]\` 表示第一个参数为 1，第二个参数为 2
+
+### ans 字段（仅对答案表模式）
+- 类型：数组
+- 说明：可接受的答案列表，每个元素都是一种正确答案
+- 单一答案：\`[3]\`
+- 多个可接受答案：\`[1, 2, 3]\`
+- 复杂结构：\`[[0, 3], [3, 0]]\``
+
+  return `你是竞赛编程题库助手。根据以下 JSON 生成题目草稿。
+
+${taskSection}
+
+${gradingSection}
+
+${outputSection}
+
+${fieldSection}`
 }
 
 export type ProblemAuthoringParsed = {
   title?: string
   functionSignature?: string
-  entryPoint: string
-  gradingMode: 'expected' | 'verify'
+  entryPoint?: string
+  gradingMode?: 'expected' | 'verify'
   testCases: Array<{ data: unknown[]; ans?: unknown }>
   verifySource?: string | null
   reasoning?: string
@@ -1174,15 +1319,30 @@ function buildProblemAuthoringUserContent(input: {
   functionSignature?: string
   testCasesData: unknown[][]
   tags?: string[]
+  authoringMode: 'create' | 'append' | 'fix'
+  targetCount: number
+  existingCount: number
 }): string {
-  const userPayload = {
+  const userPayload: Record<string, unknown> = {
     title: input.title?.trim() ?? '',
     description: input.description?.trim() ?? '',
     functionSignature: input.functionSignature?.trim() ?? '',
     tags: input.tags ?? [],
-    testCasesData: input.testCasesData,
   }
-  return `请根据以下 JSON 生成输出（整段回复必须且仅为一个可被 JSON.parse 解析的对象）：\n${JSON.stringify(userPayload)}`
+
+  if (input.authoringMode !== 'create') {
+    userPayload.testCasesData = input.testCasesData.map(d => ({ data: d }))
+  }
+
+  let extraContent = ''
+  
+  if (input.authoringMode === 'append' && input.testCasesData.length > 0) {
+    extraContent = `\n\n## 现有用例\n\n\`\`\`json\n${JSON.stringify(input.testCasesData.map(d => ({ data: d })), null, 2)}\n\`\`\``
+  } else if (input.authoringMode === 'fix' && input.testCasesData.length > 0) {
+    extraContent = `\n\n## 现有用例\n\n\`\`\`json\n${JSON.stringify(input.testCasesData.map(d => ({ data: d })), null, 2)}\n\`\`\``
+  }
+
+  return `## 输入 JSON\n\n\`\`\`json\n${JSON.stringify(userPayload, null, 2)}\n\`\`\`${extraContent}`
 }
 
 export async function generateProblemAuthoring(
@@ -1198,17 +1358,29 @@ export async function generateProblemAuthoring(
     assistGradingFromForm?: boolean
     /** 表单当前判题方式；assistGradingFromForm 为 true 时用于提示词与结果校正。 */
     formGradingMode?: 'expected' | 'verify'
+    /** 生成模式：create（生成新用例）、append（追加用例）、fix（修正答案）。 */
+    authoringMode?: 'create' | 'append' | 'fix'
+    /** 目标用例数（create/append 模式需要）。 */
+    targetCount?: number
+    /** 现有用例数（append 模式需要）。 */
+    existingCount?: number
   },
   options: StreamLlmOptions,
 ): Promise<ProblemAuthoringParsed> {
   const assistGradingFromForm = input.assistGradingFromForm === true
   const formGradingMode: 'expected' | 'verify' =
     input.formGradingMode === 'verify' ? 'verify' : 'expected'
+  const authoringMode = input.authoringMode || 'append'
+  const targetCount = input.targetCount || 5
+  const existingCount = input.existingCount || 0
   const expectedAlternativesBeforeVerify = readProblemAuthoringExpectedAltsLimit()
   const systemContent = buildProblemAuthoringSystemContent({
     assistGradingFromForm,
     formGradingMode,
     expectedAlternativesBeforeVerify,
+    authoringMode,
+    targetCount,
+    existingCount,
   })
   const userContent = buildProblemAuthoringUserContent({
     title: input.title,
@@ -1216,6 +1388,9 @@ export async function generateProblemAuthoring(
     functionSignature: input.functionSignature,
     testCasesData: input.testCasesData,
     tags: input.tags,
+    authoringMode,
+    targetCount,
+    existingCount,
   })
   const raw = await chatCompletionContent(
     provider,
@@ -1240,10 +1415,10 @@ export async function generateProblemAuthoring(
   }
   const o = normalizeAuthoringKeys(parsedObj)
   const entryPoint = typeof o.entryPoint === 'string' ? o.entryPoint.trim() : ''
-  if (!entryPoint) throw new Error('JSON 缺少 entryPoint')
+  if (!entryPoint && authoringMode !== 'fix') throw new Error('JSON 缺少 entryPoint')
 
   let gradingMode: 'expected' | 'verify'
-  if (assistGradingFromForm) {
+  if (assistGradingFromForm || authoringMode === 'fix') {
     gradingMode = formGradingMode
   } else {
     gradingMode = o.gradingMode === 'verify' ? 'verify' : 'expected'
@@ -1272,13 +1447,13 @@ export async function generateProblemAuthoring(
     }
   }
 
-  if (testCases.length === 0) {
+  if (testCases.length === 0 && authoringMode !== 'create') {
     for (const d of input.testCasesData) {
       testCases.push({ data: [...d] })
     }
   }
 
-  if (testCases.length === 0) {
+  if (testCases.length === 0 && authoringMode !== 'fix') {
     throw new Error('模型未返回有效测试用例，请重试或补充题干细节')
   }
 
@@ -1303,7 +1478,7 @@ export async function generateProblemAuthoring(
   return {
     ...(titleOut ? { title: titleOut } : {}),
     ...(functionSignatureOut ? { functionSignature: functionSignatureOut } : {}),
-    entryPoint,
+    ...(entryPoint ? { entryPoint } : {}),
     gradingMode,
     testCases,
     verifySource: gradingMode === 'verify' ? verifySource : null,
