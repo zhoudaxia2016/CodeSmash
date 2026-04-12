@@ -29,7 +29,7 @@ import {
 import { Header } from '@/layout/Header'
 import { MobileHeader } from '@/layout/MobileHeader'
 import { useOutletContext } from 'react-router-dom'
-import type { AppShellContext } from '@/layout/app-shell-context'
+import type { LayoutContext } from '@/layout/layout-context'
 
 function applyBattleSessionToHeaderSelections(
   session: BattleSession,
@@ -53,7 +53,7 @@ function applyBattleSessionToHeaderSelections(
 }
 
 export function Battle() {
-  const { models, problems } = useOutletContext<AppShellContext>()
+  const { models, problems } = useOutletContext<LayoutContext>()
   const isMobile = useMediaQuery('(max-width: 1023px)')
   const [searchParams, setSearchParams] = useSearchParams()
   const openBattleDetailId = searchParams.get('battle')

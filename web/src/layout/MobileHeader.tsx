@@ -2,7 +2,7 @@ import type { ReactNode } from 'react'
 import { Menu } from 'lucide-react'
 import { AccountControl } from './AccountControl'
 import { useOutletContext } from 'react-router-dom'
-import type { AppShellContext } from './app-shell-context'
+import type { LayoutContext } from './layout-context'
 
 type Props = {
   title: ReactNode
@@ -13,7 +13,7 @@ export function MobileHeader({
   title,
   children,
 }: Props) {
-  const { openSidebar, user, meLoading, logout, loginHref } = useOutletContext<AppShellContext>()
+  const { openSidebar, user, meLoading, logout, loginHref } = useOutletContext<LayoutContext>()
   return (
     <div
       data-page-header

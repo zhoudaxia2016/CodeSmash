@@ -1,7 +1,6 @@
-// TODO: 迁移位置
 import type { AuthUser, PlatformModel, Problem } from '@/types'
 
-export type AppShellContext = {
+export type LayoutContext = {
   models: PlatformModel[]
   problems: Problem[]
   user: AuthUser | null
