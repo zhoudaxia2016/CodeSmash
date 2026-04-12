@@ -35,8 +35,8 @@ import {
   removeLocalBattleEntry,
   type LocalBattleHistoryEntry,
 } from '@/utils/battle-local-history'
-import { Header } from '@/layout/Header'
-import { MobileHeader } from '@/layout/MobileHeader'
+import { Header } from '@/layout/header'
+import { MobileHeader } from '@/layout/mobile-header'
 
 type MergedRow = {
   id: string

@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { Menu } from 'lucide-react'
-import { AccountControl } from './AccountControl'
+import { AccountControl } from './account-control'
 import { useOutletContext } from 'react-router-dom'
 import type { LayoutContext } from './layout-context'
 

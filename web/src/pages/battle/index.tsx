@@ -26,8 +26,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Header } from '@/layout/Header'
-import { MobileHeader } from '@/layout/MobileHeader'
+import { Header } from '@/layout/header'
+import { MobileHeader } from '@/layout/mobile-header'
 import { useOutletContext } from 'react-router-dom'
 import type { LayoutContext } from '@/layout/layout-context'
 

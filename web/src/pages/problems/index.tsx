@@ -22,8 +22,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Header } from '@/layout/Header'
-import { MobileHeader } from '@/layout/MobileHeader'
+import { Header } from '@/layout/header'
+import { MobileHeader } from '@/layout/mobile-header'
 
 type GradingFilter = 'all' | GradingMode
 type SortKey = 'updated' | 'title'

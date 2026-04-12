@@ -10,8 +10,8 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useLeaderboard, useMe, useProblems } from '@/hooks/useApi'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import type { LeaderboardEntry } from '@/types'
-import { Header } from '@/layout/Header'
-import { MobileHeader } from '@/layout/MobileHeader'
+import { Header } from '@/layout/header'
+import { MobileHeader } from '@/layout/mobile-header'
 
 function pct(n: number): string {
   if (!Number.isFinite(n)) return '—'

@@ -5,7 +5,7 @@ import { api } from '@/api/client'
 import { LoginAutoSyncBattles } from '@/components/login-auto-sync-battles'
 import { useMe, useModels, useProblems } from '@/hooks/useApi'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
-import { Sidebar } from '@/layout/Sidebar'
+import { Sidebar } from '@/layout/sidebar'
 
 function githubLoginHref(): string {
   const apiBase = import.meta.env.VITE_API_URL?.trim().replace(/\/$/, '') ?? ''

@@ -17,8 +17,8 @@ import {
 } from '@/hooks/useApi'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { AdminLogs } from '@/pages/admin/logs'
-import { Header } from '@/layout/Header'
-import { MobileHeader } from '@/layout/MobileHeader'
+import { Header } from '@/layout/header'
+import { MobileHeader } from '@/layout/mobile-header'
 
 type Tab = 'models' | 'logs'
 
