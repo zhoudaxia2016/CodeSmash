@@ -8,7 +8,10 @@ import {
 } from '@/components/ui/select'
 import { useQueryClient } from '@tanstack/react-query'
 import { useLeaderboard, useMe, useProblems } from '@/hooks/useApi'
+import { useMediaQuery } from '@/hooks/useMediaQuery'
 import type { LeaderboardEntry } from '@/types'
+import { Header } from '@/layout/Header'
+import { MobileHeader } from '@/layout/MobileHeader'
 
 function pct(n: number): string {
   if (!Number.isFinite(n)) return '—'
@@ -75,6 +78,7 @@ function SortableTh({
 }
 
 export function LeaderboardPage() {
+  const isMobile = useMediaQuery('(max-width: 1023px)')
   const queryClient = useQueryClient()
   const { data: meData } = useMe()
   const user = meData?.user ?? null
@@ -114,7 +118,13 @@ export function LeaderboardPage() {
     'h-9 min-w-[5.5rem] px-3 text-sm font-semibold transition-colors'
 
   return (
-    <div className="space-y-10">
+    <div className="space-y-4">
+      {isMobile ? (
+        <MobileHeader title="排行榜" />
+      ) : (
+        <Header title="排行榜" />
+      )}
+
       <div className="space-y-4">
         <div className="flex flex-wrap items-center gap-3">
           <div

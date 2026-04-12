@@ -27,6 +27,7 @@ import {
   useProblems,
   useSyncBattleToCloud,
 } from '@/hooks/useApi'
+import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { defaultAuthoringModelId } from '@/lib/authoring-model'
 import type { BattleResultListItem, BattleSession } from '@/types'
 import {
@@ -34,6 +35,8 @@ import {
   removeLocalBattleEntry,
   type LocalBattleHistoryEntry,
 } from '@/utils/battle-local-history'
+import { Header } from '@/layout/Header'
+import { MobileHeader } from '@/layout/MobileHeader'
 
 type MergedRow = {
   id: string
@@ -93,6 +96,7 @@ function outcomeLabel(cloud: BattleResultListItem | undefined, battle: BattleSes
 type StorageFilter = 'all' | 'local' | 'cloud'
 
 export function BattleHistory() {
+  const isMobile = useMediaQuery('(max-width: 1023px)')
   const navigate = useNavigate()
   const openBattleDetail = (battleId: string) => {
     navigate(`/battle?battle=${battleId}`)
@@ -288,242 +292,250 @@ export function BattleHistory() {
 
   return (
     <div className="space-y-6">
-      <p className="text-sm text-muted-foreground">
-        从列表打开对战会进入对战页查看详情；已登录且保存在你账户下的云端对战可继续追问。同步到云端后会移除本地副本。
-      </p>
+      {isMobile ? (
+        <MobileHeader title="对战历史" />
+      ) : (
+        <Header title="对战历史" />
+      )}
 
-      <div className="flex flex-col gap-3 rounded-lg border border-border/80 bg-muted/15 p-3 sm:flex-row sm:flex-wrap sm:items-end">
-        <div className="grid gap-2 sm:min-w-[10rem]">
-          <span className="text-xs font-medium text-muted-foreground">题目</span>
-          <Select value={filterProblemId} onValueChange={setFilterProblemId}>
-            <SelectTrigger className="h-9" aria-label="筛选题目">
-              <SelectValue placeholder="全部题目" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="__all__">全部题目</SelectItem>
-              {problems.map((p) => (
-                <SelectItem key={p.id} value={p.id}>
-                  {p.title}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="grid gap-2 sm:min-w-[10rem]">
-          <span className="text-xs font-medium text-muted-foreground">模型（任一侧）</span>
-          <Select value={filterModelId} onValueChange={setFilterModelId}>
-            <SelectTrigger className="h-9" aria-label="筛选模型">
-              <SelectValue placeholder="全部模型" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="__all__">全部模型</SelectItem>
-              {models.map((m) => (
-                <SelectItem key={m.id} value={m.id}>
-                  {m.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="grid gap-2 sm:min-w-[10rem]">
-          <span className="text-xs font-medium text-muted-foreground">创建者</span>
-          <Select value={filterCreatorId} onValueChange={setFilterCreatorId}>
-            <SelectTrigger className="h-9" aria-label="筛选创建者">
-              <SelectValue placeholder="全部创建者" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="__all__">全部创建者</SelectItem>
-              {creatorOptions.map(([id, label]) => (
-                <SelectItem key={id} value={id}>
-                  {label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="grid gap-2 sm:min-w-[10rem]">
-          <span className="text-xs font-medium text-muted-foreground">本地 / 云端</span>
-          <Select
-            value={filterStorage}
-            onValueChange={(v) => setFilterStorage(v as StorageFilter)}
-          >
-            <SelectTrigger className="h-9" aria-label="筛选存储位置">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">全部</SelectItem>
-              <SelectItem value="local">本地</SelectItem>
-              <SelectItem value="cloud">仅云端</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
-
-      {rowSyncErr ? (
-        <p className="text-sm text-destructive" role="alert">
-          {rowSyncErr}
+      <div className="space-y-6">
+        <p className="text-sm text-muted-foreground">
+          从列表打开对战会进入对战页查看详情；已登录且保存在你账户下的云端对战可继续追问。同步到云端后会移除本地副本。
         </p>
-      ) : null}
-      {deleteErr ? (
-        <p className="text-sm text-destructive" role="alert">
-          {deleteErr}
-        </p>
-      ) : null}
 
-      <div className="overflow-x-auto rounded-lg border border-border">
-        <table className="w-full min-w-[52rem] border-collapse text-left text-sm">
-          <thead>
-            <tr className="border-b border-border bg-muted/40">
-              <th className="px-3 py-2.5 align-middle font-medium">题目</th>
-              <th className="px-3 py-2.5 text-center align-middle font-medium">模型</th>
-              <th className="px-3 py-2.5 text-center align-middle font-medium">结果</th>
-              <th className="px-3 py-2.5 text-center align-middle font-medium">创建者</th>
-              <th className="px-3 py-2.5 text-center align-middle font-medium">存储</th>
-              <th className="px-3 py-2.5 text-center align-middle font-medium">操作</th>
-              <th className="px-3 py-2.5 text-end align-middle font-medium">时间</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredRows.length === 0 ? (
-              <tr>
-                <td colSpan={7} className="px-3 py-8 text-center text-muted-foreground">
-                  没有符合条件的记录。
-                </td>
+        <div className="flex flex-col gap-3 rounded-lg border border-border/80 bg-muted/15 p-3 sm:flex-row sm:flex-wrap sm:items-end">
+          <div className="grid gap-2 sm:min-w-[10rem]">
+            <span className="text-xs font-medium text-muted-foreground">题目</span>
+            <Select value={filterProblemId} onValueChange={setFilterProblemId}>
+              <SelectTrigger className="h-9" aria-label="筛选题目">
+                <SelectValue placeholder="全部题目" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__all__">全部题目</SelectItem>
+                {problems.map((p) => (
+                  <SelectItem key={p.id} value={p.id}>
+                    {p.title}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="grid gap-2 sm:min-w-[10rem]">
+            <span className="text-xs font-medium text-muted-foreground">模型（任一侧）</span>
+            <Select value={filterModelId} onValueChange={setFilterModelId}>
+              <SelectTrigger className="h-9" aria-label="筛选模型">
+                <SelectValue placeholder="全部模型" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__all__">全部模型</SelectItem>
+                {models.map((m) => (
+                  <SelectItem key={m.id} value={m.id}>
+                    {m.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="grid gap-2 sm:min-w-[10rem]">
+            <span className="text-xs font-medium text-muted-foreground">创建者</span>
+            <Select value={filterCreatorId} onValueChange={setFilterCreatorId}>
+              <SelectTrigger className="h-9" aria-label="筛选创建者">
+                <SelectValue placeholder="全部创建者" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__all__">全部创建者</SelectItem>
+                {creatorOptions.map(([id, label]) => (
+                  <SelectItem key={id} value={id}>
+                    {label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="grid gap-2 sm:min-w-[10rem]">
+            <span className="text-xs font-medium text-muted-foreground">本地 / 云端</span>
+            <Select
+              value={filterStorage}
+              onValueChange={(v) => setFilterStorage(v as StorageFilter)}
+            >
+              <SelectTrigger className="h-9" aria-label="筛选存储位置">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">全部</SelectItem>
+                <SelectItem value="local">本地</SelectItem>
+                <SelectItem value="cloud">仅云端</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        {rowSyncErr ? (
+          <p className="text-sm text-destructive" role="alert">
+            {rowSyncErr}
+          </p>
+        ) : null}
+        {deleteErr ? (
+          <p className="text-sm text-destructive" role="alert">
+            {deleteErr}
+          </p>
+        ) : null}
+
+        <div className="overflow-x-auto rounded-lg border border-border">
+          <table className="w-full min-w-[52rem] border-collapse text-left text-sm">
+            <thead>
+              <tr className="border-b border-border bg-muted/40">
+                <th className="px-3 py-2.5 align-middle font-medium">题目</th>
+                <th className="px-3 py-2.5 text-center align-middle font-medium">模型</th>
+                <th className="px-3 py-2.5 text-center align-middle font-medium">结果</th>
+                <th className="px-3 py-2.5 text-center align-middle font-medium">创建者</th>
+                <th className="px-3 py-2.5 text-center align-middle font-medium">存储</th>
+                <th className="px-3 py-2.5 text-center align-middle font-medium">操作</th>
+                <th className="px-3 py-2.5 text-end align-middle font-medium">时间</th>
               </tr>
-            ) : (
-              filteredRows.map((row) => {
-                const pid = row.local?.battle.problemId ?? row.cloud?.problemId ?? ''
-                const title = problemTitle(pid)
-                const t = row.local?.savedAt ?? row.cloud?.createdAt ?? ''
+            </thead>
+            <tbody>
+              {filteredRows.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="px-3 py-8 text-center text-muted-foreground">
+                    没有符合条件的记录。
+                  </td>
+                </tr>
+              ) : (
+                filteredRows.map((row) => {
+                  const pid = row.local?.battle.problemId ?? row.cloud?.problemId ?? ''
+                  const title = problemTitle(pid)
+                  const t = row.local?.savedAt ?? row.cloud?.createdAt ?? ''
 
-                return (
-                  <tr key={row.id} className="border-b border-border/80">
-                    <td className="max-w-[14rem] align-middle px-3 py-2">
-                      <button
-                        type="button"
-                        className="w-full text-left font-medium text-foreground hover:text-primary"
-                        onClick={() => openProblemDetail(pid)}
-                        disabled={!pid}
-                      >
-                        <span className="break-words">{title}</span>
-                      </button>
-                    </td>
-                    <td className="align-middle px-3 py-2">{modelTags(row)}</td>
-                    <td className="whitespace-nowrap px-3 py-2 text-center align-middle">
-                      {outcomeLabel(row.cloud, row.local?.battle)}
-                    </td>
-                    <td className="px-3 py-2 text-center align-middle">{creatorLabel(row.cloud, row.local)}</td>
-                    <td className="max-w-[10rem] px-3 py-2 text-center align-middle">{storageCell(row)}</td>
-                    <td className="whitespace-nowrap px-3 py-2 text-center align-middle">
-                      <div className="flex flex-wrap items-center justify-center gap-1.5">
-                        <Button
+                  return (
+                    <tr key={row.id} className="border-b border-border/80">
+                      <td className="max-w-[14rem] align-middle px-3 py-2">
+                        <button
                           type="button"
-                          variant="outline"
-                          size="sm"
-                          className="h-8"
-                          disabled={!row.local && !row.cloud}
-                          onClick={() => openBattleDetail(row.id)}
+                          className="w-full text-left font-medium text-foreground hover:text-primary"
+                          onClick={() => openProblemDetail(pid)}
+                          disabled={!pid}
                         >
-                          详情
-                        </Button>
-                        {row.local && user ? (
+                          <span className="break-words">{title}</span>
+                        </button>
+                      </td>
+                      <td className="align-middle px-3 py-2">{modelTags(row)}</td>
+                      <td className="whitespace-nowrap px-3 py-2 text-center align-middle">
+                        {outcomeLabel(row.cloud, row.local?.battle)}
+                      </td>
+                      <td className="px-3 py-2 text-center align-middle">{creatorLabel(row.cloud, row.local)}</td>
+                      <td className="max-w-[10rem] px-3 py-2 text-center align-middle">{storageCell(row)}</td>
+                      <td className="whitespace-nowrap px-3 py-2 text-center align-middle">
+                        <div className="flex flex-wrap items-center justify-center gap-1.5">
                           <Button
                             type="button"
-                            variant="secondary"
+                            variant="outline"
                             size="sm"
                             className="h-8"
-                            disabled={syncMutation.isPending || deleteMutation.isPending}
-                            onClick={() => syncRow(row.local!)}
+                            disabled={!row.local && !row.cloud}
+                            onClick={() => openBattleDetail(row.id)}
                           >
-                            {syncMutation.isPending ? '同步中…' : '同步到云端'}
+                            详情
                           </Button>
-                        ) : null}
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="h-8 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                          title={!user && !!row.cloud && !row.local ? '未登录无法删除云端记录' : undefined}
-                          disabled={
-                            deleteMutation.isPending ||
-                            syncMutation.isPending ||
-                            (!user && !!row.cloud && !row.local) ||
-                            (!row.local && !row.cloud)
-                          }
-                          onClick={() => openDeleteDialog(row)}
-                        >
-                          {deleteMutation.isPending ? '删除中…' : '删除'}
-                        </Button>
-                      </div>
-                    </td>
-                    <td className="whitespace-nowrap px-3 py-2 text-end align-middle text-muted-foreground">
-                      {t ? new Date(t).toLocaleString() : '—'}
-                    </td>
-                  </tr>
-                )
-              })
-            )}
-          </tbody>
-        </table>
-      </div>
+                          {row.local && user ? (
+                            <Button
+                              type="button"
+                              variant="secondary"
+                              size="sm"
+                              className="h-8"
+                              disabled={syncMutation.isPending || deleteMutation.isPending}
+                              onClick={() => syncRow(row.local!)}
+                            >
+                              {syncMutation.isPending ? '同步中…' : '同步到云端'}
+                            </Button>
+                          ) : null}
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="h-8 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                            title={!user && !!row.cloud && !row.local ? '未登录无法删除云端记录' : undefined}
+                            disabled={
+                              deleteMutation.isPending ||
+                              syncMutation.isPending ||
+                              (!user && !!row.cloud && !row.local) ||
+                              (!row.local && !row.cloud)
+                            }
+                            onClick={() => openDeleteDialog(row)}
+                          >
+                            {deleteMutation.isPending ? '删除中…' : '删除'}
+                          </Button>
+                        </div>
+                      </td>
+                      <td className="whitespace-nowrap px-3 py-2 text-end align-middle text-muted-foreground">
+                        {t ? new Date(t).toLocaleString() : '—'}
+                      </td>
+                    </tr>
+                  )
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
 
-      {cloudLoading ? (
-        <p className="text-xs text-muted-foreground">正在加载云端列表…</p>
-      ) : null}
+        {cloudLoading ? (
+          <p className="text-xs text-muted-foreground">正在加载云端列表…</p>
+        ) : null}
 
-      <AlertDialog
-        open={deleteTarget !== null}
-        onOpenChange={(open) => {
-          if (!open) setDeleteTarget(null)
-        }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>删除对战记录</AlertDialogTitle>
-            <AlertDialogDescription>
-              {deleteTarget ? deleteConfirmDescription(deleteTarget) : null}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={deleteMutation.isPending}>取消</AlertDialogCancel>
-            <Button
-              type="button"
-              variant="destructive"
-              size="sm"
-              className="sm:mt-0"
-              disabled={deleteMutation.isPending}
-              onClick={confirmDelete}
-            >
-              {deleteMutation.isPending ? '删除中…' : '删除'}
-            </Button>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      {problemDetailOpen && problemDetailId ? (
-        <ProblemEditor
-          open={problemDetailOpen}
+        <AlertDialog
+          open={deleteTarget !== null}
           onOpenChange={(open) => {
-            if (!open) setProblemDetailId(null)
+            if (!open) setDeleteTarget(null)
           }}
-          title="题目详情"
-          titleId="battle-history-problem-detail-title"
-          mode="edit"
-          problemId={problemDetailId}
-          detail={problemDetailQuery.data ?? null}
-          loading={problemDetailQuery.isLoading}
-          loadFailed={problemDetailQuery.isError}
-          problemSummary={problemDetailSummary}
-          models={models}
-          defaultModelId={defaultAuthoringModelId(models)}
-          tagSuggestions={problemTagCatalog}
-          viewOnly
-          onCancel={() => setProblemDetailId(null)}
-          cancelLabel="关闭"
-          submitLabel="保存全部"
-          onConfirm={async (_args: Parameters<NonNullable<ProblemEditorProps['onConfirm']>>[0]) => {}}
-        />
-      ) : null}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>删除对战记录</AlertDialogTitle>
+              <AlertDialogDescription>
+                {deleteTarget ? deleteConfirmDescription(deleteTarget) : null}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={deleteMutation.isPending}>取消</AlertDialogCancel>
+              <Button
+                type="button"
+                variant="destructive"
+                size="sm"
+                className="sm:mt-0"
+                disabled={deleteMutation.isPending}
+                onClick={confirmDelete}
+              >
+                {deleteMutation.isPending ? '删除中…' : '删除'}
+              </Button>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        {problemDetailOpen && problemDetailId ? (
+          <ProblemEditor
+            open={problemDetailOpen}
+            onOpenChange={(open) => {
+              if (!open) setProblemDetailId(null)
+            }}
+            title="题目详情"
+            titleId="battle-history-problem-detail-title"
+            mode="edit"
+            problemId={problemDetailId}
+            detail={problemDetailQuery.data ?? null}
+            loading={problemDetailQuery.isLoading}
+            loadFailed={problemDetailQuery.isError}
+            problemSummary={problemDetailSummary}
+            models={models}
+            defaultModelId={defaultAuthoringModelId(models)}
+            tagSuggestions={problemTagCatalog}
+            viewOnly
+            onCancel={() => setProblemDetailId(null)}
+            cancelLabel="关闭"
+            submitLabel="保存全部"
+            onConfirm={async (_args: Parameters<NonNullable<ProblemEditorProps['onConfirm']>>[0]) => {}}
+          />
+        ) : null}
+      </div>
     </div>
   )
 }

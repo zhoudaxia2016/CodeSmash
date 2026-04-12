@@ -1,11 +1,11 @@
-import { useState, useEffect, useLayoutEffect, useMemo, useRef } from 'react'
-import { createPortal } from 'react-dom'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { ChevronDown } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
-import { useOutletContext, useSearchParams } from 'react-router-dom'
+import { useSearchParams } from 'react-router-dom'
 import { api } from '@/api/client'
 import { useMe, useProblem, useStartBattle, useBattle, useBattleResultDetail } from '@/hooks/useApi'
 import { usePersistProblemEditorUpdate } from '@/hooks/usePersistProblemEditorUpdate'
+import { useMediaQuery } from '@/hooks/useMediaQuery'
 import type { BattleSession, PlatformModel, Problem, ProblemGradingContext } from '@/types'
 import {
   removeLocalBattleEntry,
@@ -26,6 +26,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { Header } from '@/layout/Header'
+import { MobileHeader } from '@/layout/MobileHeader'
+import { useOutletContext } from 'react-router-dom'
+import type { AppShellContext } from '@/layout/app-shell-context'
 
 function applyBattleSessionToHeaderSelections(
   session: BattleSession,
@@ -48,10 +52,9 @@ function applyBattleSessionToHeaderSelections(
   }
 }
 
-const HEADER_SLOT_ID = 'battle-header-slot'
-
 export function Battle() {
-  const { models, problems } = useOutletContext<{ models: PlatformModel[]; problems: Problem[] }>()
+  const { models, problems } = useOutletContext<AppShellContext>()
+  const isMobile = useMediaQuery('(max-width: 1023px)')
   const [searchParams, setSearchParams] = useSearchParams()
   const openBattleDetailId = searchParams.get('battle')
   const onClearOpenBattleDetail = () => {
@@ -132,12 +135,6 @@ export function Battle() {
   const selectableModelsRef = useRef(selectableModels)
   problemsRef.current = problems
   selectableModelsRef.current = selectableModels
-
-  const [headerSlotEl, setHeaderSlotEl] = useState<HTMLElement | null>(null)
-
-  useLayoutEffect(() => {
-    setHeaderSlotEl(document.getElementById(HEADER_SLOT_ID))
-  }, [])
 
   useEffect(() => {
     if (problems.length === 0) return
@@ -492,50 +489,58 @@ export function Battle() {
 
   return (
     <div className="space-y-6">
-      {headerSlotEl ? createPortal(headerControls, headerSlotEl) : headerControls}
+      {isMobile ? (
+        <MobileHeader title="对战" />
+      ) : (
+        <Header title="对战">{headerControls}</Header>
+      )}
 
-      {mainPanel}
+      <div className="space-y-6">
+        {isMobile ? headerControls : null}
 
-      <NewProblem
-        open={newProblemOpen}
-        onOpenChange={setNewProblemOpen}
-        models={selectableModels.length > 0 ? selectableModels : models}
-        defaultModelId={defaultAuthoringModelId(selectableModels.length > 0 ? selectableModels : models)}
-        tagSuggestions={problemTagCatalog}
-        onCreated={(id) => {
-          setSelectedProblem(id)
-          setNewProblemOpen(false)
-          void queryClient.invalidateQueries({ queryKey: ['problems'] })
-          void queryClient.invalidateQueries({ queryKey: ['problems', id] })
-        }}
-      />
+        {mainPanel}
 
-      {problemDetailOpen && selectedProblemRow && (
-        <ProblemEditor
-          open={problemDetailOpen}
-          onOpenChange={setProblemDetailOpen}
-          title="题目详情"
-          titleId="battle-problem-detail-title"
-          mode="edit"
-          problemId={selectedProblem}
-          detail={problemDetailQuery.data ?? null}
-          loading={detailLoading}
-          loadFailed={detailFailed}
-          problemSummary={selectedProblemRow}
+        <NewProblem
+          open={newProblemOpen}
+          onOpenChange={setNewProblemOpen}
           models={selectableModels.length > 0 ? selectableModels : models}
           defaultModelId={defaultAuthoringModelId(selectableModels.length > 0 ? selectableModels : models)}
           tagSuggestions={problemTagCatalog}
-          onConfirm={async (
-            args: Parameters<NonNullable<ProblemEditorProps['onConfirm']>>[0],
-          ) => {
-            await persistProblemEditorUpdate(args)
-            if (args.kind === 'update') {
-              setProblemDetailOpen(false)
-            }
+          onCreated={(id) => {
+            setSelectedProblem(id)
+            setNewProblemOpen(false)
+            void queryClient.invalidateQueries({ queryKey: ['problems'] })
+            void queryClient.invalidateQueries({ queryKey: ['problems', id] })
           }}
-          submitLabel="保存全部"
         />
-      )}
+
+        {problemDetailOpen && selectedProblemRow && (
+          <ProblemEditor
+            open={problemDetailOpen}
+            onOpenChange={setProblemDetailOpen}
+            title="题目详情"
+            titleId="battle-problem-detail-title"
+            mode="edit"
+            problemId={selectedProblem}
+            detail={problemDetailQuery.data ?? null}
+            loading={detailLoading}
+            loadFailed={detailFailed}
+            problemSummary={selectedProblemRow}
+            models={selectableModels.length > 0 ? selectableModels : models}
+            defaultModelId={defaultAuthoringModelId(selectableModels.length > 0 ? selectableModels : models)}
+            tagSuggestions={problemTagCatalog}
+            onConfirm={async (
+              args: Parameters<NonNullable<ProblemEditorProps['onConfirm']>>[0],
+            ) => {
+              await persistProblemEditorUpdate(args)
+              if (args.kind === 'update') {
+                setProblemDetailOpen(false)
+              }
+            }}
+            submitLabel="保存全部"
+          />
+        )}
+      </div>
     </div>
   )
 }

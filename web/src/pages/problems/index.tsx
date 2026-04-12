@@ -1,5 +1,4 @@
-import { useEffect, useMemo, useState, useLayoutEffect } from 'react'
-import { createPortal } from 'react-dom'
+import { useEffect, useMemo, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import {
   useDeleteProblem,
@@ -9,6 +8,7 @@ import {
   useProblems,
 } from '@/hooks/useApi'
 import { usePersistProblemEditorUpdate } from '@/hooks/usePersistProblemEditorUpdate'
+import { useMediaQuery } from '@/hooks/useMediaQuery'
 import type { GradingMode, Problem } from '@/types'
 import { defaultAuthoringModelId } from '@/lib/authoring-model'
 import { ProblemEditor, type ProblemEditorProps } from '@/components/problem-editor'
@@ -22,8 +22,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-
-const PROBLEMS_HEADER_SLOT_ID = 'problems-header-slot'
+import { Header } from '@/layout/Header'
+import { MobileHeader } from '@/layout/MobileHeader'
 
 type GradingFilter = 'all' | GradingMode
 type SortKey = 'updated' | 'title'
@@ -37,6 +37,7 @@ function matchesSearch(p: Problem, q: string): boolean {
 }
 
 export function ProblemsPage() {
+  const isMobile = useMediaQuery('(max-width: 1023px)')
   const queryClient = useQueryClient()
   const { data: meData } = useMe()
   const currentUser = meData?.user ?? null
@@ -50,14 +51,9 @@ export function ProblemsPage() {
   const [editOpen, setEditOpen] = useState(false)
   const [editId, setEditId] = useState<string | null>(null)
   const [deleteError, setDeleteError] = useState<string | null>(null)
-  const [headerSlotEl, setHeaderSlotEl] = useState<HTMLElement | null>(null)
 
   const persistProblemEditorUpdate = usePersistProblemEditorUpdate()
   const deleteProblem = useDeleteProblem()
-
-  useLayoutEffect(() => {
-    setHeaderSlotEl(document.getElementById(PROBLEMS_HEADER_SLOT_ID))
-  }, [])
 
   const editQuery = useProblem(editId ?? '', {
     enabled: !!editId && editOpen,
@@ -148,9 +144,14 @@ export function ProblemsPage() {
 
   return (
     <div className="space-y-5">
-      {headerSlotEl ? createPortal(headerActions, headerSlotEl) : null}
+      {isMobile ? (
+        <MobileHeader title="题库" />
+      ) : (
+        <Header title="题库">{headerActions}</Header>
+      )}
 
-      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
+      <div className="space-y-5">
+        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
         <label className="flex min-w-0 flex-1 flex-col gap-1.5 sm:min-w-[12rem]">
           <span className="text-xs font-medium text-muted-foreground">搜索</span>
           <input
@@ -203,7 +204,7 @@ export function ProblemsPage() {
             </SelectContent>
           </Select>
         </div>
-      </div>
+        </div>
 
       {deleteError && (
         <p className="text-sm text-destructive" role="alert">
@@ -260,18 +261,18 @@ export function ProblemsPage() {
         />
       )}
 
-      <NewProblem
-        open={newOpen}
-        onOpenChange={setNewOpen}
-        models={models}
-        defaultModelId={defaultAuthoringModelId(models)}
-        tagSuggestions={tagOptions}
-        onCreated={(id) => {
-          setNewOpen(false)
-          void queryClient.invalidateQueries({ queryKey: ['problems'] })
-          void queryClient.invalidateQueries({ queryKey: ['problems', id] })
-        }}
-      />
+        <NewProblem
+          open={newOpen}
+          onOpenChange={setNewOpen}
+          models={models}
+          defaultModelId={defaultAuthoringModelId(models)}
+          tagSuggestions={tagOptions}
+          onCreated={(id) => {
+            setNewOpen(false)
+            void queryClient.invalidateQueries({ queryKey: ['problems'] })
+            void queryClient.invalidateQueries({ queryKey: ['problems', id] })
+          }}
+        />
 
       {editOpen && editSummary && (
         <ProblemEditor
@@ -303,6 +304,7 @@ export function ProblemsPage() {
           submitLabel="保存全部"
         />
       )}
+      </div>
     </div>
   )
 }

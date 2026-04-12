@@ -1,10 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { Outlet, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
-import { BookOpen, Box, History, Menu, ScrollText, Swords, Trophy, X } from 'lucide-react'
+import { BookOpen, Box, History, ScrollText, Swords, Trophy, X } from 'lucide-react'
 import { api } from '@/api/client'
 import { LoginAutoSyncBattles } from '@/components/login-auto-sync-battles'
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { useMe, useModels, useProblems } from '@/hooks/useApi'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 
@@ -33,24 +32,13 @@ function App() {
   const isMobile = useMediaQuery('(max-width: 1023px)')
 
   const path = location.pathname
-  const view = 
+  const view =
     path === '/history' ? 'battleHistory' :
     path === '/problems' ? 'problems' :
     path === '/leaderboard' ? 'leaderboard' :
     path.startsWith('/admin') ? 'admin' : 'battle'
-  
-  const adminTab: AdminTab = path === '/admin/logs' ? 'logs' : 'models'
 
-  const mobileTitle =
-    view === 'battle'
-      ? '对战'
-      : view === 'battleHistory'
-        ? '对战历史'
-        : view === 'problems'
-          ? '题库'
-          : view === 'admin'
-            ? adminTab === 'logs' ? '日志' : '模型'
-            : '排行榜'
+  const adminTab: AdminTab = path === '/admin/logs' ? 'logs' : 'models'
 
   const shellNavPrimedRef = useRef(false)
   useEffect(() => {
@@ -127,14 +115,14 @@ function App() {
   return (
     <div className="flex h-full min-h-0 overflow-hidden bg-background">
       <LoginAutoSyncBattles user={user} />
-      
+
       {isMobile && sidebarOpen && (
-        <div 
+        <div
           className="fixed inset-0 z-40 bg-black/50 lg:hidden"
           onClick={() => setSidebarOpen(false)}
         />
       )}
-      
+
       <aside className={`
         fixed inset-y-0 left-0 z-50 w-64 flex flex-col overflow-y-auto border-r border-arena-sidebar-border bg-arena-sidebar p-4 transition-transform duration-300
         lg:static lg:z-auto lg:shrink-0 lg:transition-none
@@ -329,13 +317,10 @@ function App() {
       </aside>
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden">
-        <header
-          id="app-shell-header"
-          className="relative z-10 shrink-0 overflow-visible border-b border-border/80 bg-arena-header-blur/85 backdrop-blur-md supports-[backdrop-filter]:bg-background/75"
-        >
-          <div className="mx-auto w-full max-w-7xl px-4 py-3 sm:px-6 lg:px-10 lg:py-4">
-            {authBanner && (
-              <p className="mb-3 text-sm text-destructive" role="alert">
+        <main className="min-h-0 flex-1 overflow-y-auto">
+          {authBanner && (
+            <div className="mx-auto w-full max-w-7xl px-4 pt-5 sm:px-6 sm:pt-6 lg:px-10 lg:pt-8">
+              <p className="text-sm text-destructive" role="alert">
                 {authBanner}
                 <button
                   type="button"
@@ -345,109 +330,20 @@ function App() {
                   关闭
                 </button>
               </p>
-            )}
-            
-            {isMobile && (
-              <div className="mb-3 grid grid-cols-[4.5rem_1fr_4.5rem] items-center gap-2">
-                <div className="flex w-[4.5rem] items-center justify-start">
-                  <button
-                    type="button"
-                    className="inline-flex h-9 w-[4.5rem] items-center justify-center gap-1 rounded-md border border-border/80 px-2 text-sm font-medium text-foreground hover:bg-muted/50"
-                    onClick={() => setSidebarOpen(true)}
-                    aria-label="打开菜单"
-                  >
-                    <Menu className="h-4 w-4" aria-hidden />
-                    菜单
-                  </button>
-                </div>
-                <p className="truncate text-center text-base font-semibold tracking-tight text-foreground">
-                  {mobileTitle}
-                </p>
-                {meLoading ? (
-                  <span className="inline-flex h-9 w-[4.5rem] items-center justify-end text-xs text-muted-foreground">
-                    会话…
-                  </span>
-                ) : user ? (
-                  <div className="flex w-[4.5rem] items-center justify-end">
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <button
-                          type="button"
-                          className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-border/80 bg-background/60"
-                          aria-label="账号菜单"
-                        >
-                          {user.avatarUrl ? (
-                            <img
-                              src={user.avatarUrl}
-                              alt={user.name ?? user.login}
-                              className="h-8 w-8 rounded-full ring-1 ring-border"
-                            />
-                          ) : (
-                            <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-muted text-xs font-semibold text-foreground">
-                              {(user.name ?? user.login).slice(0, 1).toUpperCase()}
-                            </span>
-                          )}
-                        </button>
-                      </PopoverTrigger>
-                      <PopoverContent align="end" className="w-44 p-3">
-                        <p className="truncate text-sm font-medium text-foreground">{user.name ?? user.login}</p>
-                        <p className="truncate text-xs text-muted-foreground">@{user.login}</p>
-                        <button
-                          type="button"
-                          className="mt-2 inline-flex h-8 w-full items-center justify-center rounded-md border border-border/80 px-2 text-xs font-medium text-foreground hover:bg-muted/50"
-                          onClick={() => void handleLogout()}
-                        >
-                          退出登录
-                        </button>
-                      </PopoverContent>
-                    </Popover>
-                  </div>
-                ) : (
-                  <a
-                    href={githubLoginHref()}
-                    className="inline-flex h-9 w-[4.5rem] items-center justify-center rounded-md bg-foreground px-2 text-sm font-medium text-background hover:opacity-90"
-                  >
-                    登录
-                  </a>
-                )}
-              </div>
-            )}
-            
-            {!isMobile && (
-              <>
-                {view === 'battle' ? (
-                  <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between lg:gap-6">
-                    <h1 className="shrink-0 text-xl font-semibold tracking-tight text-foreground">对战</h1>
-                    <div
-                      id="battle-header-slot"
-                      className="flex min-w-0 flex-1 flex-wrap items-center gap-2 lg:justify-end"
-                    />
-                  </div>
-                ) : view === 'problems' ? (
-                  <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between lg:gap-6">
-                    <h1 className="shrink-0 text-xl font-semibold tracking-tight text-foreground">题库</h1>
-                    <div
-                      id="problems-header-slot"
-                      className="flex min-w-0 flex-1 flex-wrap items-center gap-2 lg:justify-end"
-                    />
-                  </div>
-                ) : view === 'battleHistory' ? (
-                  <h1 className="text-xl font-semibold tracking-tight text-foreground">对战历史</h1>
-                ) : view === 'admin' ? (
-                  <h1 className="text-xl font-semibold tracking-tight text-foreground">
-                    {adminTab === 'logs' ? '日志' : '模型'}
-                  </h1>
-                ) : (
-                  <h1 className="text-xl font-semibold tracking-tight text-foreground">排行榜</h1>
-                )}
-              </>
-            )}
-          </div>
-        </header>
-
-        <main className="min-h-0 flex-1 overflow-y-auto">
-          <div className="mx-auto w-full max-w-7xl px-4 py-5 sm:px-6 sm:py-6 lg:px-10 lg:py-8">
-            <Outlet context={{ models, problems, user }} />
+            </div>
+          )}
+          <div className="mx-auto w-full max-w-7xl px-4 pt-16 pb-5 sm:px-6 sm:pt-16 sm:pb-6 lg:px-10 lg:pt-16 lg:pb-8">
+            <Outlet
+              context={{
+                models,
+                problems,
+                user,
+                openSidebar: () => setSidebarOpen(true),
+                logout: handleLogout,
+                meLoading,
+                loginHref: githubLoginHref(),
+              }}
+            />
           </div>
         </main>
       </div>
