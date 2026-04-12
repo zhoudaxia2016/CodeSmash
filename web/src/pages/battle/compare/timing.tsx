@@ -1,4 +1,4 @@
-import { formatDurationSeconds } from '@/lib/formatDuration'
+import { formatDurationSeconds } from './lib/format-duration'
 import type { ModelRound } from '@/types'
 
 export function LabeledDuration({

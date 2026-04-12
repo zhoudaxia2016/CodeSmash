@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Check, ChevronRight, Copy, GitCompare } from 'lucide-react'
-import { useStickToBottomScroll } from '@/hooks/useStickToBottomScroll'
+import { useStickToBottomScroll } from '../hooks/use-stick-to-bottom-scroll'
 import { CodeHighlight } from '@/components/code-highlight'
 import { MarkdownViewer } from '@/components/markdown-viewer'
 import { Button } from '@/components/ui/button'
@@ -15,12 +15,12 @@ import {
   sanitizeCodingThoughtForDisplay,
   splitThinkingFromModelCode,
   stripCodeFences,
-} from '@/lib/stripCodeFences'
+} from '../lib/strip-code-fences'
 import { diffLines, diffWordsWithSpace } from 'diff'
 import {
   highlightJavaScriptLinesToHtml,
   highlightJavaScriptRegexHtml,
-} from '@/lib/treeSitterJavaScript'
+} from '@/components/code-highlight/lib/tree-sitter-javascript'
 
 /** Runnable-looking code for diff/copy（与下列 CodeCell 内提取逻辑一致）。 */
 export function comparableCodeFromRound(r: ModelRound | undefined): string {

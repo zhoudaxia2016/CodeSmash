@@ -8,7 +8,7 @@ import type {
   TestCase,
   TestResult,
 } from '@/types'
-import { currentBattleRound, officialMetrics } from '@/utils/battle-round'
+import { currentBattleRound, officialMetrics } from '@/pages/battle/lib/battle-round'
 import { useSandbox } from '@/utils/sandbox'
 
 const FALLBACK_ROUND: ModelRound = {

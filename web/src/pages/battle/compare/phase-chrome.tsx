@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { activityLabel } from '@/hooks/useBattleModelSide'
+import { activityLabel } from './hooks/use-battle-model-side'
 import { PHASE_MAX_H } from '../lib/battlePhaseLayout'
 import type { ModelSideHook } from '../lib/battleTypes'
 

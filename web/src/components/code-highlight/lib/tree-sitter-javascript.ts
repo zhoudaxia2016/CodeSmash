@@ -1,10 +1,10 @@
 import { Language, Parser, Query, type QueryCapture } from 'web-tree-sitter'
 import treeSitterCoreWasmUrl from 'web-tree-sitter/web-tree-sitter.wasm?url'
-import javascriptLangWasmUrl from '../wasm/tree-sitter-javascript.wasm?url'
+import javascriptLangWasmUrl from '../../../wasm/tree-sitter-javascript.wasm?url'
 import {
   JAVASCRIPT_HIGHLIGHTS_MINIMAL_SCM,
   JAVASCRIPT_HIGHLIGHTS_SCM,
-} from './javascriptHighlightQuery'
+} from './javascript-highlight-query'
 
 const CAPTURE_PRIORITY: Record<string, number> = {
   comment: 100,

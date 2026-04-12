@@ -1,7 +1,7 @@
 import { useRef } from 'react'
-import { useStickToBottomScroll } from '@/hooks/useStickToBottomScroll'
+import { useStickToBottomScroll } from '../hooks/use-stick-to-bottom-scroll'
 import { MarkdownViewer } from '@/components/markdown-viewer'
-import { sanitizeCodingThoughtForDisplay } from '@/lib/stripCodeFences'
+import { sanitizeCodingThoughtForDisplay } from '../lib/strip-code-fences'
 import type { ModelRound } from '@/types'
 import { PHASE_CARD_INNER_SCROLL, PHASE_CARD_OUTER } from '../../lib/battlePhaseLayout'
 export function AnalysisCell({

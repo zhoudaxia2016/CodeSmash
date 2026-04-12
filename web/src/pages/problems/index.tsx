@@ -7,10 +7,10 @@ import {
   useProblem,
   useProblems,
 } from '@/hooks/useApi'
-import { usePersistProblemEditorUpdate } from '@/hooks/usePersistProblemEditorUpdate'
+import { usePersistProblemEditorUpdate } from '@/components/problem-editor/hooks/use-persist-problem-editor-update'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import type { GradingMode, Problem } from '@/types'
-import { defaultAuthoringModelId } from '@/lib/authoring-model'
+import { defaultAuthoringModelId } from '@/components/problem-editor/lib/authoring-model'
 import { ProblemEditor, type ProblemEditorProps } from '@/components/problem-editor'
 import { NewProblem } from './new-problem'
 import { ProblemList } from './problem-list'

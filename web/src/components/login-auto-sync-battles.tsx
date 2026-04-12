@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { api } from '@/api/client'
 import type { AuthUser } from '@/types'
-import { loadLocalBattleHistory, removeLocalBattleEntry } from '@/utils/battle-local-history'
+import { loadLocalBattleHistory, removeLocalBattleEntry } from '@/pages/battle/lib/battle-local-history'
 
 type Props = {
   user: AuthUser | null

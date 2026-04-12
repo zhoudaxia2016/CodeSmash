@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { ExternalLink, Plus, Trash2, X } from 'lucide-react'
-import { useProblemAuthoringAssist } from '@/hooks/useProblemAuthoringAssist'
+import { useProblemAuthoringAssist } from './hooks/use-problem-authoring-assist'
 import type {
   GradingMode,
   PlatformModel,
@@ -23,8 +23,8 @@ import { cn } from '@/lib/utils'
 import {
   buildExternalCodingPrompt,
   DEEPSEEK_CHAT_URL,
-} from '@/utils/external-coding-prompt'
-import { parseRowsToTestCases, type TestCaseRow } from '@/utils/test-case-rows'
+} from './lib/external-coding-prompt'
+import { parseRowsToTestCases, type TestCaseRow } from './lib/test-case-rows'
 import { ProblemAuthoringAssistPanel } from './authoring-assist-panel'
 import { ProblemFormFields, ProblemGradingBlock } from './core-fields'
 

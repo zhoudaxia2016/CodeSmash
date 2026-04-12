@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useSuggestProblemAuthoring } from '@/hooks/useApi'
 import type { GradingMode, ProblemAuthoringResponse } from '@/types'
-import { parseRowsToTestCases, type TestCaseRow } from '@/utils/test-case-rows'
+import { parseRowsToTestCases, type TestCaseRow } from '../lib/test-case-rows'
 
 /**
  * 命题「大模型辅助」：调用 `/problems/authoring`，与具体表单 UI 解耦。

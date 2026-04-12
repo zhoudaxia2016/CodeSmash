@@ -1,3 +1,3 @@
 export type ModelSideHook = ReturnType<
-  typeof import('@/hooks/useBattleModelSide').useBattleModelSide
+  typeof import('../compare/hooks/use-battle-model-side').useBattleModelSide
 >

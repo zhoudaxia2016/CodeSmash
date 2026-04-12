@@ -1,9 +1,9 @@
 import { useLayoutEffect, useRef, useState } from 'react'
-import { buildVerifySnippet } from '@/lib/copyTestHarness'
+import { buildVerifySnippet } from '../lib/copy-test-harness'
 import type { ModelRound, TestResult } from '@/types'
 import { CopyVerifySnippetButton } from '../copy-verify-snippet-button'
 import { CompactOfficialTiming } from '../timing'
-import { officialMetrics } from '@/utils/battle-round'
+import { officialMetrics } from '@/pages/battle/lib/battle-round'
 import {
   OFFICIAL_ACTUAL_OUTPUT_MAX_H,
   PHASE_CARD_INNER_SCROLL,

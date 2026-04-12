@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { highlightJavaScriptToHtml } from '@/lib/treeSitterJavaScript'
+import { highlightJavaScriptToHtml } from './lib/tree-sitter-javascript'
 
 type Props = {
   code: string

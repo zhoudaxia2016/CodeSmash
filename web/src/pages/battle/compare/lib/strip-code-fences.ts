@@ -1,4 +1,4 @@
-import { tryExtractStructuredCodeString } from '@/lib/modelStructuredParse'
+import { tryExtractStructuredCodeString } from './model-structured-parse'
 
 /**
  * 与 server `codePhaseSplit.ts` 同步：`ThinkingTagSpec` + `THINKING_TAGS` + `thinkingCloseLiteral`。

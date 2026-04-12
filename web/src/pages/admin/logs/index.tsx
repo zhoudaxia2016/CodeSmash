@@ -20,12 +20,12 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import type { AdminLlmCallLogsQuery } from '@/types'
-import { formatAdminLogTableTime } from '@/utils/format-admin-log-time'
+import { formatAdminLogTableTime } from './lib/format-admin-log-time'
 import {
   outputJsonToMarkdownFields,
   parseLlmCallMessages,
   parseLlmOutputMode,
-} from '@/utils/admin-llm-call-log'
+} from './lib/admin-llm-call-log'
 
 const inputClass =
   'h-9 w-full rounded-md border border-border/80 bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40'

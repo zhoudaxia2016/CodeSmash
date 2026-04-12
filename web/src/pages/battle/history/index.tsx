@@ -28,13 +28,13 @@ import {
   useSyncBattleToCloud,
 } from '@/hooks/useApi'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
-import { defaultAuthoringModelId } from '@/lib/authoring-model'
+import { defaultAuthoringModelId } from '@/components/problem-editor/lib/authoring-model'
 import type { BattleResultListItem, BattleSession } from '@/types'
 import {
   loadLocalBattleHistory,
   removeLocalBattleEntry,
   type LocalBattleHistoryEntry,
-} from '@/utils/battle-local-history'
+} from '@/pages/battle/lib/battle-local-history'
 import { Header } from '@/layout/header'
 import { MobileHeader } from '@/layout/mobile-header'
 

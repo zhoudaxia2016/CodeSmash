@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { useSyncBattleToCloud } from '@/hooks/useApi'
 import type { AuthUser, BattleSession, ProblemGradingContext, TestCase } from '@/types'
-import { getLocalBattleEntry, removeLocalBattleEntry } from '@/utils/battle-local-history'
+import { getLocalBattleEntry, removeLocalBattleEntry } from '@/pages/battle/lib/battle-local-history'
 import { Compare } from '../compare'
 import { buildMockBattle } from '../lib/mockBattle'
 

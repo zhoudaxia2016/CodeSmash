@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useRef, useState } from 'react'
 import { api } from '@/api/client'
-import { useBattleModelSide } from '@/hooks/useBattleModelSide'
+import { useBattleModelSide } from './hooks/use-battle-model-side'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import type { BattleSession, ModelResult, ProblemGradingContext, TestCase } from '@/types'
 import {
@@ -15,7 +15,7 @@ import {
   roundShowsOfficialPhase,
   roundTabPassLabels,
   viewRoundForTab,
-} from '@/utils/battle-round'
+} from '@/pages/battle/lib/battle-round'
 import { ModelRoundBar } from './model-round-bar'
 import { AnalysisCell } from './cells/analysis-cell'
 import { CodeCell, comparableCodeFromRound } from './cells/code-cell'
